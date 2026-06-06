@@ -61,6 +61,7 @@ create index if not exists habit_entries_habit_date_idx on public.habit_entries 
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   new.updated_at = now();
