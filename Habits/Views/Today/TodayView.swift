@@ -75,10 +75,7 @@ private struct HabitTodayRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(habit.name)
                     .font(.headline)
-                    .strikethrough(progress.isComplete, color: .secondary)
-                Text(targetText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                targetLabel
             }
 
             Spacer()
@@ -141,5 +138,24 @@ private struct HabitTodayRow: View {
 
     private var targetText: String {
         "\(progress.currentCount)/\(habit.targetCount) \(habit.period.unitLabel)"
+    }
+
+    /// Conteggio del periodo. A obiettivo raggiunto viene evidenziato (grassetto, colore
+    /// dell'abitudine, icona trofeo) per celebrare il traguardo senza far sembrare
+    /// l'abitudine "chiusa": resta comunque completabile (extra mile).
+    @ViewBuilder
+    private var targetLabel: some View {
+        if progress.isComplete {
+            HStack(spacing: 4) {
+                Image(systemName: "trophy.fill")
+                Text(targetText)
+            }
+            .font(.caption.bold())
+            .foregroundStyle(habit.swiftUIColor)
+        } else {
+            Text(targetText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
