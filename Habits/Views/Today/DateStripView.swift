@@ -4,6 +4,9 @@ import UIKit
 /// Striscia orizzontale degli ultimi giorni, per selezionare la data della vista Today.
 struct DateStripView: View {
     @Binding var selected: Date
+    /// Cambia valore ogni volta che si tocca "Oggi": solo allora la striscia scrolla.
+    /// Selezionare un giorno qui dentro non muove invece lo scroll.
+    var scrollToTodayToken: Int
 
     private let calendar = Calendar.current
     private let days = 14
@@ -28,6 +31,11 @@ struct DateStripView: View {
             }
             .onAppear {
                 proxy.scrollTo(calendar.startOfDay(for: selected), anchor: .trailing)
+            }
+            .onChange(of: scrollToTodayToken) { _, _ in
+                withAnimation {
+                    proxy.scrollTo(calendar.startOfDay(for: Date()), anchor: .trailing)
+                }
             }
         }
     }

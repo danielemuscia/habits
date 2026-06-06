@@ -8,6 +8,8 @@ final class HabitsViewModel: ObservableObject {
     @Published var selectedDate: Date = Date()
     @Published var isLoading = false
     @Published var errorMessage: String?
+    /// Incrementato a ogni tap su "Oggi" per far scrollare la striscia delle date.
+    @Published var scrollToTodayToken = 0
 
     private let service = HabitService()
     private var calendar: Calendar = {
@@ -20,7 +22,10 @@ final class HabitsViewModel: ObservableObject {
 
     var isToday: Bool { calendar.isDateInToday(selectedDate) }
 
-    func goToToday() { selectedDate = Date() }
+    func goToToday() {
+        selectedDate = Date()
+        scrollToTodayToken += 1
+    }
 
     // MARK: - Loading
 
@@ -77,6 +82,19 @@ final class HabitsViewModel: ObservableObject {
     func toggle(_ habit: Habit) async {
         let current = progress(for: habit).todayCount
         await setCount(habit, to: current > 0 ? 0 : 1)
+    }
+
+    /// Marca/smarca il giorno selezionato come "riposo".
+    func setRest(_ habit: Habit, _ rest: Bool) async {
+        guard let userId else { return }
+        do {
+            let updated = try await service.setRest(
+                habitId: habit.id, userId: userId, date: selectedDate, skipped: rest
+            )
+            mergeEntry(updated)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func setCount(_ habit: Habit, to count: Int) async {

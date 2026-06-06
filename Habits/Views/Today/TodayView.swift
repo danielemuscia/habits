@@ -32,7 +32,7 @@ struct TodayView: View {
 
     private var content: some View {
         ScrollView {
-            DateStripView(selected: $vm.selectedDate)
+            DateStripView(selected: $vm.selectedDate, scrollToTodayToken: vm.scrollToTodayToken)
                 .padding(.vertical, 8)
 
             LazyVStack(spacing: 12) {
@@ -62,23 +62,19 @@ private struct HabitTodayRow: View {
 
     private var habit: Habit { progress.habit }
 
+    /// Scala dell'anello, usata per il "pop" al raggiungimento dell'obiettivo.
+    @State private var popScale: CGFloat = 1
+
     var body: some View {
         HStack(spacing: 14) {
-            CircularProgressView(
-                fraction: progress.fraction,
-                color: habit.swiftUIColor,
-                lineWidth: 6,
-                icon: habit.icon
-            )
-            .frame(width: 44, height: 44)
+            leadingRing
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(habit.name)
                     .font(.headline)
-                    .strikethrough(progress.isComplete, color: .secondary)
-                Text(targetText)
+                Text(progress.isRest ? "Giorno di riposo" : targetText)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(progress.isRest ? Color.indigo : .secondary)
             }
 
             Spacer()
@@ -92,18 +88,76 @@ private struct HabitTodayRow: View {
                 .stroke(progress.isComplete ? habit.swiftUIColor.opacity(0.4) : .clear, lineWidth: 1.5)
         )
         .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
+        .contextMenu { restMenu }
     }
 
-    /// Per target=1 mostra un toggle; per target>1 mostra stepper +/- con conteggio.
+    /// Anello di avanzamento, oppure un indicatore di riposo se il giorno è marcato.
+    @ViewBuilder
+    private var leadingRing: some View {
+        if progress.isRest {
+            ZStack {
+                Circle().fill(Color(.systemGray5))
+                Image(systemName: "moon.zzz.fill").foregroundStyle(.secondary)
+            }
+            .frame(width: 44, height: 44)
+        } else {
+            CircularProgressView(
+                fraction: progress.fraction,
+                color: habit.swiftUIColor,
+                lineWidth: 6,
+                icon: habit.icon
+            )
+            .frame(width: 44, height: 44)
+            .scaleEffect(popScale)
+            .onChange(of: progress.isComplete) { _, isComplete in
+                guard isComplete else { return }
+                celebratePop()
+            }
+        }
+    }
+
+    /// Menu contestuale (long-press) per marcare/smarcare il giorno di riposo.
+    @ViewBuilder
+    private var restMenu: some View {
+        if progress.isRest {
+            Button {
+                Task { await vm.setRest(habit, false) }
+            } label: {
+                Label("Annulla riposo", systemImage: "arrow.uturn.backward")
+            }
+        } else {
+            Button {
+                Task { await vm.setRest(habit, true) }
+            } label: {
+                Label("Segna giorno di riposo", systemImage: "moon.zzz.fill")
+            }
+        }
+    }
+
+    /// Lo stepper +/- ha senso solo per più completamenti nello *stesso* giorno
+    /// (target giornaliero > 1). Negli altri casi si completa una volta al giorno con
+    /// un toggle: la spunta riflette "fatto **oggi**" (`todayCount`), mentre l'anello e
+    /// il testo a sinistra mostrano l'avanzamento del periodo. Si va oltre il target
+    /// completando più giorni/periodi (es. "6/5"), quindi il toggle non si disabilita.
     @ViewBuilder
     private var actionControl: some View {
-        if habit.targetCount == 1 && habit.period == .daily {
+        if progress.isRest {
+            Button {
+                Task { await vm.setRest(habit, false) }
+            } label: {
+                Image(systemName: "moon.zzz.fill")
+                    .font(.system(size: 26))
+                    .foregroundStyle(.indigo)
+            }
+            .buttonStyle(.plain)
+        } else if habit.period != .daily || habit.targetCount == 1 {
+            let doneToday = progress.todayCount > 0
             Button {
                 Task { await vm.toggle(habit) }
             } label: {
-                Image(systemName: progress.isComplete ? "checkmark.circle.fill" : "circle")
+                Image(systemName: doneToday ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 28))
-                    .foregroundStyle(progress.isComplete ? habit.swiftUIColor : .secondary)
+                    .foregroundStyle(doneToday ? habit.swiftUIColor : .secondary)
             }
             .buttonStyle(.plain)
         } else {
@@ -135,10 +189,15 @@ private struct HabitTodayRow: View {
     }
 
     private var targetText: String {
-        let unit = habit.period.unitLabel
-        if habit.targetCount == 1 {
-            return "\(progress.currentCount)/\(habit.targetCount) \(unit)"
+        "\(progress.currentCount)/\(habit.targetCount) \(habit.period.unitLabel)"
+    }
+
+    /// Breve "pop" celebrativo dell'anello quando l'obiettivo del periodo viene raggiunto.
+    private func celebratePop() {
+        Task { @MainActor in
+            withAnimation(.spring(response: 0.18, dampingFraction: 0.45)) { popScale = 1.3 }
+            try? await Task.sleep(for: .milliseconds(180))
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.55)) { popScale = 1 }
         }
-        return "\(progress.currentCount)/\(habit.targetCount) \(unit)"
     }
 }

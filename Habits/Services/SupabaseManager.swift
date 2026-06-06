@@ -9,7 +9,8 @@ final class SupabaseManager {
 
     private init() {
         let options = SupabaseClientOptions(
-            db: SupabaseClientOptions.DatabaseOptions(decoder: SupabaseManager.decoder)
+            db: SupabaseClientOptions.DatabaseOptions(decoder: SupabaseManager.decoder),
+            auth: SupabaseClientOptions.AuthOptions(emitLocalSessionAsInitialSession: true)
         )
         client = SupabaseClient(
             supabaseURL: SupabaseConfig.url,

@@ -74,13 +74,26 @@ struct HabitService {
     }
 
     /// Imposta il conteggio per (abitudine, data). Upsert sulla chiave unica.
+    /// Registrare un conteggio annulla l'eventuale stato di riposo del giorno.
     @discardableResult
     func setEntryCount(habitId: UUID, userId: UUID, date: Date, count: Int) async throws -> HabitEntry {
+        try await upsertEntry(habitId: habitId, userId: userId, date: date, count: max(0, count), skipped: false)
+    }
+
+    /// Marca/smarca un giorno come "riposo" (stato neutro). Azzera il conteggio.
+    @discardableResult
+    func setRest(habitId: UUID, userId: UUID, date: Date, skipped: Bool) async throws -> HabitEntry {
+        try await upsertEntry(habitId: habitId, userId: userId, date: date, count: 0, skipped: skipped)
+    }
+
+    @discardableResult
+    private func upsertEntry(habitId: UUID, userId: UUID, date: Date, count: Int, skipped: Bool) async throws -> HabitEntry {
         let payload = HabitEntryUpsert(
             habitId: habitId,
             userId: userId,
             entryDate: SupabaseManager.dateFormatter.string(from: date),
-            count: max(0, count)
+            count: count,
+            skipped: skipped
         )
         return try await client.from("habit_entries")
             .upsert(payload, onConflict: "habit_id,entry_date", returning: .representation)
