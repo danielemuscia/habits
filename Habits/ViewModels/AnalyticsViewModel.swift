@@ -66,7 +66,7 @@ final class AnalyticsViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     /// Finestra selezionata; al cambio le statistiche si ricalcolano sui dati già caricati.
-    @Published var range: AnalyticsRange = .month {
+    @Published var range: AnalyticsRange = .week {
         didSet { rebuild() }
     }
 
