@@ -95,17 +95,20 @@ private struct HabitTodayRow: View {
     }
 
     /// Lo stepper +/- ha senso solo per più completamenti nello *stesso* giorno
-    /// (target giornaliero > 1). Per i periodi diversi dal giorno il completamento
-    /// avviene una volta al giorno, quindi si usa un semplice toggle.
+    /// (target giornaliero > 1). Negli altri casi si completa una volta al giorno con
+    /// un toggle: la spunta riflette "fatto **oggi**" (`todayCount`), mentre l'anello e
+    /// il testo a sinistra mostrano l'avanzamento del periodo. Si va oltre il target
+    /// completando più giorni/periodi (es. "6/5"), quindi il toggle non si disabilita.
     @ViewBuilder
     private var actionControl: some View {
         if habit.period != .daily || habit.targetCount == 1 {
+            let doneToday = progress.todayCount > 0
             Button {
                 Task { await vm.toggle(habit) }
             } label: {
-                Image(systemName: progress.isComplete ? "checkmark.circle.fill" : "circle")
+                Image(systemName: doneToday ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 28))
-                    .foregroundStyle(progress.isComplete ? habit.swiftUIColor : .secondary)
+                    .foregroundStyle(doneToday ? habit.swiftUIColor : .secondary)
             }
             .buttonStyle(.plain)
         } else {
@@ -137,10 +140,6 @@ private struct HabitTodayRow: View {
     }
 
     private var targetText: String {
-        let unit = habit.period.unitLabel
-        if habit.targetCount == 1 {
-            return "\(progress.currentCount)/\(habit.targetCount) \(unit)"
-        }
-        return "\(progress.currentCount)/\(habit.targetCount) \(unit)"
+        "\(progress.currentCount)/\(habit.targetCount) \(habit.period.unitLabel)"
     }
 }
