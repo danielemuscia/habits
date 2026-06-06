@@ -29,7 +29,9 @@ struct HabitProgress {
         var todayCount = 0
         var isRest = false
         for entry in entries where entry.habitId == habit.id {
-            if interval.contains(entry.entryDate) {
+            // Intervallo semi-aperto [inizio, fine): la mezzanotte finale appartiene
+            // al periodo successivo, non a questo (evita di sommare il giorno dopo).
+            if entry.entryDate >= interval.start && entry.entryDate < interval.end {
                 periodCount += entry.count
             }
             if calendar.isDate(entry.entryDate, inSameDayAs: startOfDay) {

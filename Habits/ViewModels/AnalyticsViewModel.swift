@@ -147,16 +147,21 @@ final class AnalyticsViewModel: ObservableObject {
             guard let ref = calendar.date(byAdding: component, value: -offset, to: end) else { break }
             let interval = calendar.dateInterval(of: component, for: ref)
                 ?? DateInterval(start: calendar.startOfDay(for: ref), duration: 86_400)
-            // Manteniamo sempre la cella corrente (offset 0); fermiamo quando è fuori finestra.
-            if offset > 0 && interval.end <= windowStart { break }
+            // Manteniamo sempre la cella corrente (offset 0); fermiamo quando la cella
+            // inizia prima della finestra (così la finestra ha il numero giusto di celle).
+            if offset > 0 && interval.start < windowStart { break }
+
+            // Intervallo semi-aperto [inizio, fine): la mezzanotte finale appartiene
+            // alla cella successiva, non a questa (evita doppi conteggi sul confine).
+            func inCell(_ date: Date) -> Bool { date >= interval.start && date < interval.end }
 
             let count = entries
-                .filter { interval.contains($0.entryDate) }
+                .filter { inCell($0.entryDate) }
                 .reduce(0) { $0 + $1.count }
 
             // Quanti giorni di questa cella sono di riposo: scontano l'obiettivo atteso.
             let totalDays = max(1, Int((interval.duration / 86_400).rounded()))
-            let restInCell = restDays.filter { interval.contains($0) }.count
+            let restInCell = restDays.filter(inCell).count
             let isRest = restInCell >= totalDays   // intera cella a riposo
             let activeFactor = Double(totalDays - restInCell) / Double(totalDays)
             let effectiveTarget = isRest ? 0 : max(1, Int((Double(cellTarget) * activeFactor).rounded()))
