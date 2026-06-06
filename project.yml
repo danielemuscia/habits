@@ -53,3 +53,15 @@ targets:
     dependencies:
       - package: Supabase
         product: Supabase
+    postBuildScripts:
+      # Build number automatico: usa il numero di commit git, così cresce a ogni
+      # commit senza interventi manuali (richiesto da App Store/TestFlight).
+      - name: Auto build number (git)
+        basedOnDependencyAnalysis: false
+        script: |
+          build=$(git -C "$SRCROOT" rev-list --count HEAD 2>/dev/null || echo "$CURRENT_PROJECT_VERSION")
+          plist="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+          if [ -f "$plist" ]; then
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "$plist"
+            echo "CFBundleVersion impostato a $build"
+          fi
