@@ -62,6 +62,9 @@ private struct HabitTodayRow: View {
 
     private var habit: Habit { progress.habit }
 
+    /// Scala dell'anello, usata per il "pop" al raggiungimento dell'obiettivo.
+    @State private var popScale: CGFloat = 1
+
     var body: some View {
         HStack(spacing: 14) {
             CircularProgressView(
@@ -71,11 +74,18 @@ private struct HabitTodayRow: View {
                 icon: habit.icon
             )
             .frame(width: 44, height: 44)
+            .scaleEffect(popScale)
+            .onChange(of: progress.isComplete) { _, isComplete in
+                guard isComplete else { return }
+                celebratePop()
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(habit.name)
                     .font(.headline)
-                targetLabel
+                Text(targetText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
@@ -140,22 +150,12 @@ private struct HabitTodayRow: View {
         "\(progress.currentCount)/\(habit.targetCount) \(habit.period.unitLabel)"
     }
 
-    /// Conteggio del periodo. A obiettivo raggiunto viene evidenziato (grassetto, colore
-    /// dell'abitudine, icona trofeo) per celebrare il traguardo senza far sembrare
-    /// l'abitudine "chiusa": resta comunque completabile (extra mile).
-    @ViewBuilder
-    private var targetLabel: some View {
-        if progress.isComplete {
-            HStack(spacing: 4) {
-                Image(systemName: "trophy.fill")
-                Text(targetText)
-            }
-            .font(.caption.bold())
-            .foregroundStyle(habit.swiftUIColor)
-        } else {
-            Text(targetText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    /// Breve "pop" celebrativo dell'anello quando l'obiettivo del periodo viene raggiunto.
+    private func celebratePop() {
+        Task { @MainActor in
+            withAnimation(.spring(response: 0.18, dampingFraction: 0.45)) { popScale = 1.3 }
+            try? await Task.sleep(for: .milliseconds(180))
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.55)) { popScale = 1 }
         }
     }
 }
