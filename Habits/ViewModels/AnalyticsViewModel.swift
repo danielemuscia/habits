@@ -1,39 +1,7 @@
 import Foundation
 
-/// Statistiche aggregate per una singola abitudine.
-struct HabitStats: Identifiable {
-    let id: UUID
-    let habit: Habit
-    /// Periodi completati consecutivi fino a quello corrente (streak).
-    let currentStreak: Int
-    /// Streak massima storica.
-    let bestStreak: Int
-    /// Numero di periodi (recenti) in cui il target è stato raggiunto.
-    let completedPeriods: Int
-    /// Periodi totali considerati.
-    let totalPeriods: Int
-    /// Conteggio totale di completamenti registrati.
-    let totalCount: Int
-    /// Serie per il grafico: (etichetta periodo, conteggio, completato?).
-    let series: [PeriodBucket]
-
-    var completionRate: Double {
-        guard totalPeriods > 0 else { return 0 }
-        return Double(completedPeriods) / Double(totalPeriods)
-    }
-}
-
-struct PeriodBucket: Identifiable {
-    let id = UUID()
-    let date: Date
-    let label: String
-    let count: Int
-    let isComplete: Bool
-}
-
 /// Finestra temporale scelta dall'utente per gli Analytics.
-/// Determina quanto indietro guardare: di conseguenza grafico, streak e completamento
-/// si riferiscono tutti a questo intervallo.
+/// Determina quanto indietro guardare e la granularità delle celle della heatmap.
 enum AnalyticsRange: String, CaseIterable, Identifiable {
     case week, month, quarter, year
 
@@ -48,6 +16,25 @@ enum AnalyticsRange: String, CaseIterable, Identifiable {
         }
     }
 
+    var subtitle: String {
+        switch self {
+        case .week:    return "Ultima settimana · per giorno"
+        case .month:   return "Ultimo mese · per giorno"
+        case .quarter: return "Ultimo trimestre · per settimana"
+        case .year:    return "Ultimo anno · per mese"
+        }
+    }
+
+    /// Granularità di una cella della heatmap.
+    var cellComponent: Calendar.Component {
+        switch self {
+        case .week:    return .day
+        case .month:   return .day
+        case .quarter: return .weekOfYear
+        case .year:    return .month
+        }
+    }
+
     /// Inizio (incluso) della finestra rispetto a `end`.
     func start(from end: Date, calendar: Calendar) -> Date {
         switch self {
@@ -57,6 +44,43 @@ enum AnalyticsRange: String, CaseIterable, Identifiable {
         case .year:    return calendar.date(byAdding: .year, value: -1, to: end) ?? end
         }
     }
+}
+
+/// Una cella della heatmap: una porzione di tempo (giorno/settimana/mese) colorata
+/// in base a quanto l'obiettivo è stato riempito in quella porzione.
+struct HeatCell: Identifiable {
+    let id = UUID()
+    let date: Date
+    /// Etichetta breve (es. iniziale del giorno o del mese), usata in alcune finestre.
+    let label: String
+    let count: Int
+    /// Quanto è "pieno" [0, 1+]: count / obiettivo della cella.
+    let fraction: Double
+    let isComplete: Bool
+}
+
+/// Statistiche aggregate per una singola abitudine, riferite alla finestra scelta.
+struct HabitStats: Identifiable {
+    let id: UUID
+    let habit: Habit
+    /// Periodi (celle) completati consecutivi fino all'ultimo (streak).
+    let currentStreak: Int
+    /// Streak massima nella finestra.
+    let bestStreak: Int
+    /// Completamento medio della finestra [0, 1].
+    let completion: Double
+    /// Celle della heatmap, dalla più vecchia alla più recente.
+    let cells: [HeatCell]
+    /// Numero di colonne in cui disporre le celle.
+    let columns: Int
+    /// Celle vuote iniziali per allineare la griglia mensile ai giorni della settimana.
+    let leadingBlanks: Int
+    /// Intestazione di colonna (giorni della settimana) per la vista mensile.
+    let header: [String]?
+    /// Mostra l'etichetta sopra ogni cella (settimana/anno).
+    let showCellLabels: Bool
+    /// Descrizione della finestra mostrata.
+    let subtitle: String
 }
 
 /// Calcola le statistiche per la sezione Analytics.
@@ -107,83 +131,117 @@ final class AnalyticsViewModel: ObservableObject {
     }
 
     private func computeStats(for habit: Habit, entries: [HabitEntry], end: Date) -> HabitStats {
-        // Un "bucket" è un periodo dell'abitudine (giorno/settimana/...). Ne includiamo
-        // quanti ne entrano nella finestra scelta dall'utente, dal più recente all'indietro.
+        let component = range.cellComponent
         let windowStart = range.start(from: end, calendar: calendar)
-        var buckets: [PeriodBucket] = []
-        let safetyCap = 400
+        let cellTarget = self.cellTarget(for: habit, component: component)
 
-        for offset in 0..<safetyCap {
-            guard let refDate = shift(end, by: -offset, period: habit.period) else { break }
-            let interval = habit.period.dateInterval(containing: refDate, calendar: calendar)
-            // Ci fermiamo quando il periodo è interamente prima della finestra
-            // (manteniamo sempre almeno il periodo corrente, offset 0).
+        var cells: [HeatCell] = []
+        for offset in 0..<500 {
+            guard let ref = calendar.date(byAdding: component, value: -offset, to: end) else { break }
+            let interval = calendar.dateInterval(of: component, for: ref)
+                ?? DateInterval(start: calendar.startOfDay(for: ref), duration: 86_400)
+            // Manteniamo sempre la cella corrente (offset 0); fermiamo quando è fuori finestra.
             if offset > 0 && interval.end <= windowStart { break }
             let count = entries
                 .filter { interval.contains($0.entryDate) }
                 .reduce(0) { $0 + $1.count }
-            buckets.append(PeriodBucket(
+            cells.append(HeatCell(
                 date: interval.start,
-                label: label(for: interval.start, period: habit.period),
+                label: cellLabel(for: interval.start, component: component),
                 count: count,
-                isComplete: count >= habit.targetCount
+                fraction: cellTarget > 0 ? Double(count) / Double(cellTarget) : 0,
+                isComplete: count >= cellTarget
             ))
         }
-        buckets.reverse() // dal più vecchio al più recente
+        cells.reverse() // dal più vecchio al più recente
 
-        // Streak corrente: dai bucket più recenti all'indietro.
+        // Streak corrente: dalle celle più recenti all'indietro.
         var currentStreak = 0
-        for bucket in buckets.reversed() {
-            if bucket.isComplete { currentStreak += 1 } else { break }
+        for cell in cells.reversed() {
+            if cell.isComplete { currentStreak += 1 } else { break }
         }
-
         // Streak migliore.
-        var bestStreak = 0
-        var running = 0
-        for bucket in buckets {
-            if bucket.isComplete {
-                running += 1
-                bestStreak = max(bestStreak, running)
-            } else {
-                running = 0
-            }
+        var bestStreak = 0, running = 0
+        for cell in cells {
+            if cell.isComplete { running += 1; bestStreak = max(bestStreak, running) }
+            else { running = 0 }
         }
 
-        let completed = buckets.filter(\.isComplete).count
-        let total = entries.reduce(0) { $0 + $1.count }
+        // Completamento medio della finestra: somma riempita / somma attesa, con cap per cella.
+        let filled = cells.reduce(0) { $0 + min($1.count, cellTarget) }
+        let expected = cellTarget * cells.count
+        let completion = expected > 0 ? Double(filled) / Double(expected) : 0
+
+        // Layout della griglia.
+        let columns = (range == .month) ? 7 : cells.count
+        var leadingBlanks = 0
+        if range == .month, let first = cells.first {
+            let wd = calendar.component(.weekday, from: first.date)
+            leadingBlanks = (wd - calendar.firstWeekday + 7) % 7
+        }
+        let header: [String]? = (range == .month) ? ["L", "M", "M", "G", "V", "S", "D"] : nil
 
         return HabitStats(
             id: habit.id,
             habit: habit,
             currentStreak: currentStreak,
             bestStreak: bestStreak,
-            completedPeriods: completed,
-            totalPeriods: buckets.count,
-            totalCount: total,
-            series: buckets
+            completion: completion,
+            cells: cells,
+            columns: max(1, columns),
+            leadingBlanks: leadingBlanks,
+            header: header,
+            showCellLabels: range == .week || range == .year,
+            subtitle: range.subtitle
         )
     }
 
-    private func shift(_ date: Date, by amount: Int, period: HabitPeriod) -> Date? {
-        let component: Calendar.Component
-        switch period {
-        case .daily:   component = .day
-        case .weekly:  component = .weekOfYear
-        case .monthly: component = .month
-        case .yearly:  component = .year
-        }
-        return calendar.date(byAdding: component, value: amount, to: date)
+    /// Obiettivo atteso in una singola cella, scalando il target dell'abitudine
+    /// dalla durata del suo periodo alla durata della cella.
+    private func cellTarget(for habit: Habit, component: Calendar.Component) -> Int {
+        let periodDays = days(forPeriod: habit.period)
+        let cellDays = days(forComponent: component)
+        let scaled = Double(habit.targetCount) * cellDays / periodDays
+        return max(1, Int(scaled.rounded()))
     }
 
-    private func label(for date: Date, period: HabitPeriod) -> String {
+    private func days(forPeriod period: HabitPeriod) -> Double {
+        switch period {
+        case .daily:   return 1
+        case .weekly:  return 7
+        case .monthly: return 30
+        case .yearly:  return 365
+        }
+    }
+
+    private func days(forComponent component: Calendar.Component) -> Double {
+        switch component {
+        case .day:        return 1
+        case .weekOfYear: return 7
+        case .month:      return 30
+        default:          return 1
+        }
+    }
+
+    private func cellLabel(for date: Date, component: Calendar.Component) -> String {
+        switch component {
+        case .day:   return Self.weekdayFormatter.string(from: date).uppercased()
+        case .month: return Self.monthFormatter.string(from: date).uppercased()
+        default:     return ""
+        }
+    }
+
+    private static let weekdayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "it_IT")
-        switch period {
-        case .daily:   f.dateFormat = "d/M"
-        case .weekly:  f.dateFormat = "d/M"
-        case .monthly: f.dateFormat = "MMM"
-        case .yearly:  f.dateFormat = "yyyy"
-        }
-        return f.string(from: date)
-    }
+        f.dateFormat = "EEEEE"
+        return f
+    }()
+
+    private static let monthFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "it_IT")
+        f.dateFormat = "MMMMM"
+        return f
+    }()
 }
