@@ -8,25 +8,37 @@ struct AnalyticsView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if vm.isLoading && vm.stats.isEmpty {
-                    ProgressView().controlSize(.large)
-                } else if habitsVM.habits.isEmpty {
-                    EmptyStateView(
-                        icon: "chart.bar",
-                        title: "Niente da analizzare",
-                        message: "Aggiungi abitudini e inizia a registrarle per vedere i trend."
-                    )
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 16) {
-                            ForEach(vm.stats) { stat in
-                                HabitStatsCard(stat: stat)
-                            }
-                        }
-                        .padding()
+            VStack(spacing: 0) {
+                Picker("Periodo", selection: $vm.range) {
+                    ForEach(AnalyticsRange.allCases) { range in
+                        Text(range.label).tag(range)
                     }
                 }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+
+                Group {
+                    if vm.isLoading && vm.stats.isEmpty {
+                        ProgressView().controlSize(.large)
+                    } else if habitsVM.habits.isEmpty {
+                        EmptyStateView(
+                            icon: "chart.bar",
+                            title: "Niente da analizzare",
+                            message: "Aggiungi abitudini e inizia a registrarle per vedere i trend."
+                        )
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 16) {
+                                ForEach(vm.stats) { stat in
+                                    HabitStatsCard(stat: stat)
+                                }
+                            }
+                            .padding()
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .navigationTitle("Analytics")
             .task(id: habitsVM.habits.map(\.id)) {

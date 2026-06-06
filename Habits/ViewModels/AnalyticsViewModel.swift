@@ -31,12 +31,44 @@ struct PeriodBucket: Identifiable {
     let isComplete: Bool
 }
 
+/// Finestra temporale scelta dall'utente per gli Analytics.
+/// Determina quanto indietro guardare: di conseguenza grafico, streak e completamento
+/// si riferiscono tutti a questo intervallo.
+enum AnalyticsRange: String, CaseIterable, Identifiable {
+    case week, month, quarter, year
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .week:    return "Settimana"
+        case .month:   return "Mese"
+        case .quarter: return "Trimestre"
+        case .year:    return "Anno"
+        }
+    }
+
+    /// Inizio (incluso) della finestra rispetto a `end`.
+    func start(from end: Date, calendar: Calendar) -> Date {
+        switch self {
+        case .week:    return calendar.date(byAdding: .day, value: -7, to: end) ?? end
+        case .month:   return calendar.date(byAdding: .month, value: -1, to: end) ?? end
+        case .quarter: return calendar.date(byAdding: .month, value: -3, to: end) ?? end
+        case .year:    return calendar.date(byAdding: .year, value: -1, to: end) ?? end
+        }
+    }
+}
+
 /// Calcola le statistiche per la sezione Analytics.
 @MainActor
 final class AnalyticsViewModel: ObservableObject {
     @Published var stats: [HabitStats] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    /// Finestra selezionata; al cambio le statistiche si ricalcolano sui dati già caricati.
+    @Published var range: AnalyticsRange = .month {
+        didSet { rebuild() }
+    }
 
     private let service = HabitService()
     private var calendar: Calendar = {
@@ -44,6 +76,10 @@ final class AnalyticsViewModel: ObservableObject {
         c.firstWeekday = 2
         return c
     }()
+
+    /// Dati grezzi dell'ultimo caricamento, per ricalcolare al cambio di finestra senza refetch.
+    private var loadedHabits: [Habit] = []
+    private var loadedEntries: [HabitEntry] = []
 
     func load(habits: [Habit]) async {
         isLoading = true
@@ -54,22 +90,35 @@ final class AnalyticsViewModel: ObservableObject {
         guard let start = calendar.date(byAdding: .year, value: -1, to: end) else { return }
 
         do {
-            let allEntries = try await service.fetchEntries(from: start, to: end)
-            stats = habits.map { habit in
-                computeStats(for: habit, entries: allEntries.filter { $0.habitId == habit.id }, end: end)
-            }
+            loadedEntries = try await service.fetchEntries(from: start, to: end)
+            loadedHabits = habits
+            rebuild()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func computeStats(for habit: Habit, entries: [HabitEntry], end: Date) -> HabitStats {
-        let bucketCount = bucketsToShow(for: habit.period)
-        var buckets: [PeriodBucket] = []
+    /// Ricostruisce le statistiche dai dati caricati, per la finestra corrente.
+    private func rebuild() {
+        let end = Date()
+        stats = loadedHabits.map { habit in
+            computeStats(for: habit, entries: loadedEntries.filter { $0.habitId == habit.id }, end: end)
+        }
+    }
 
-        for offset in stride(from: bucketCount - 1, through: 0, by: -1) {
-            guard let refDate = shift(end, by: -offset, period: habit.period) else { continue }
+    private func computeStats(for habit: Habit, entries: [HabitEntry], end: Date) -> HabitStats {
+        // Un "bucket" è un periodo dell'abitudine (giorno/settimana/...). Ne includiamo
+        // quanti ne entrano nella finestra scelta dall'utente, dal più recente all'indietro.
+        let windowStart = range.start(from: end, calendar: calendar)
+        var buckets: [PeriodBucket] = []
+        let safetyCap = 400
+
+        for offset in 0..<safetyCap {
+            guard let refDate = shift(end, by: -offset, period: habit.period) else { break }
             let interval = habit.period.dateInterval(containing: refDate, calendar: calendar)
+            // Ci fermiamo quando il periodo è interamente prima della finestra
+            // (manteniamo sempre almeno il periodo corrente, offset 0).
+            if offset > 0 && interval.end <= windowStart { break }
             let count = entries
                 .filter { interval.contains($0.entryDate) }
                 .reduce(0) { $0 + $1.count }
@@ -80,6 +129,7 @@ final class AnalyticsViewModel: ObservableObject {
                 isComplete: count >= habit.targetCount
             ))
         }
+        buckets.reverse() // dal più vecchio al più recente
 
         // Streak corrente: dai bucket più recenti all'indietro.
         var currentStreak = 0
@@ -112,15 +162,6 @@ final class AnalyticsViewModel: ObservableObject {
             totalCount: total,
             series: buckets
         )
-    }
-
-    private func bucketsToShow(for period: HabitPeriod) -> Int {
-        switch period {
-        case .daily:   return 14
-        case .weekly:  return 12
-        case .monthly: return 12
-        case .yearly:  return 5
-        }
     }
 
     private func shift(_ date: Date, by amount: Int, period: HabitPeriod) -> Date? {
