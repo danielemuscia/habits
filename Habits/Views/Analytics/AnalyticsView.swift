@@ -92,12 +92,25 @@ private struct HabitStatsCard: View {
         }
         .frame(height: 130)
         .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 6)) {
+            // L'asse X è categorico (etichette stringa): senza selezione esplicita
+            // verrebbero mostrate tutte e si sovrapporrebbero. Mostriamo ~6 etichette.
+            AxisMarks(values: thinnedLabels) {
                 AxisValueLabel().font(.caption2)
             }
         }
         .chartYAxis {
             AxisMarks(position: .leading)
         }
+    }
+
+    /// Sottoinsieme uniforme delle etichette dei periodi, per evitare sovrapposizioni.
+    private var thinnedLabels: [String] {
+        let labels = stat.series.map(\.label)
+        let maxLabels = 6
+        guard labels.count > maxLabels else { return labels }
+        let step = Int((Double(labels.count) / Double(maxLabels)).rounded(.up))
+        return labels.enumerated()
+            .filter { $0.offset % step == 0 }
+            .map(\.element)
     }
 }

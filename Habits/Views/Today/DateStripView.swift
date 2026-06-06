@@ -29,6 +29,11 @@ struct DateStripView: View {
             .onAppear {
                 proxy.scrollTo(calendar.startOfDay(for: selected), anchor: .trailing)
             }
+            .onChange(of: selected) { _, newValue in
+                withAnimation {
+                    proxy.scrollTo(calendar.startOfDay(for: newValue), anchor: .trailing)
+                }
+            }
         }
     }
 

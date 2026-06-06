@@ -94,10 +94,12 @@ private struct HabitTodayRow: View {
         .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
     }
 
-    /// Per target=1 mostra un toggle; per target>1 mostra stepper +/- con conteggio.
+    /// Lo stepper +/- ha senso solo per più completamenti nello *stesso* giorno
+    /// (target giornaliero > 1). Per i periodi diversi dal giorno il completamento
+    /// avviene una volta al giorno, quindi si usa un semplice toggle.
     @ViewBuilder
     private var actionControl: some View {
-        if habit.targetCount == 1 && habit.period == .daily {
+        if habit.period != .daily || habit.targetCount == 1 {
             Button {
                 Task { await vm.toggle(habit) }
             } label: {

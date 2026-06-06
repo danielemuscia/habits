@@ -116,7 +116,7 @@ final class AnalyticsViewModel: ObservableObject {
 
     private func bucketsToShow(for period: HabitPeriod) -> Int {
         switch period {
-        case .daily:   return 30
+        case .daily:   return 14
         case .weekly:  return 12
         case .monthly: return 12
         case .yearly:  return 5
