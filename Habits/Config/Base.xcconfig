@@ -1,0 +1,11 @@
+// Configurazione di base dell'app.
+// I valori reali di Supabase vivono in `Secrets.xcconfig` (gitignored) e
+// vengono inclusi qui sotto se il file esiste (#include? = include opzionale).
+//
+// Valori di default vuoti: l'app compila comunque, ma andrà configurata
+// prima dell'uso (vedi README).
+
+SUPABASE_URL =
+SUPABASE_ANON_KEY =
+
+#include? "Secrets.xcconfig"
