@@ -67,25 +67,14 @@ private struct HabitTodayRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            CircularProgressView(
-                fraction: progress.fraction,
-                color: habit.swiftUIColor,
-                lineWidth: 6,
-                icon: habit.icon
-            )
-            .frame(width: 44, height: 44)
-            .scaleEffect(popScale)
-            .onChange(of: progress.isComplete) { _, isComplete in
-                guard isComplete else { return }
-                celebratePop()
-            }
+            leadingRing
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(habit.name)
                     .font(.headline)
-                Text(targetText)
+                Text(progress.isRest ? "Giorno di riposo" : targetText)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(progress.isRest ? Color.indigo : .secondary)
             }
 
             Spacer()
@@ -99,6 +88,50 @@ private struct HabitTodayRow: View {
                 .stroke(progress.isComplete ? habit.swiftUIColor.opacity(0.4) : .clear, lineWidth: 1.5)
         )
         .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
+        .contextMenu { restMenu }
+    }
+
+    /// Anello di avanzamento, oppure un indicatore di riposo se il giorno è marcato.
+    @ViewBuilder
+    private var leadingRing: some View {
+        if progress.isRest {
+            ZStack {
+                Circle().fill(Color(.systemGray5))
+                Image(systemName: "moon.zzz.fill").foregroundStyle(.secondary)
+            }
+            .frame(width: 44, height: 44)
+        } else {
+            CircularProgressView(
+                fraction: progress.fraction,
+                color: habit.swiftUIColor,
+                lineWidth: 6,
+                icon: habit.icon
+            )
+            .frame(width: 44, height: 44)
+            .scaleEffect(popScale)
+            .onChange(of: progress.isComplete) { _, isComplete in
+                guard isComplete else { return }
+                celebratePop()
+            }
+        }
+    }
+
+    /// Menu contestuale (long-press) per marcare/smarcare il giorno di riposo.
+    @ViewBuilder
+    private var restMenu: some View {
+        if progress.isRest {
+            Button {
+                Task { await vm.setRest(habit, false) }
+            } label: {
+                Label("Annulla riposo", systemImage: "arrow.uturn.backward")
+            }
+        } else {
+            Button {
+                Task { await vm.setRest(habit, true) }
+            } label: {
+                Label("Segna giorno di riposo", systemImage: "moon.zzz.fill")
+            }
+        }
     }
 
     /// Lo stepper +/- ha senso solo per più completamenti nello *stesso* giorno
@@ -108,7 +141,16 @@ private struct HabitTodayRow: View {
     /// completando più giorni/periodi (es. "6/5"), quindi il toggle non si disabilita.
     @ViewBuilder
     private var actionControl: some View {
-        if habit.period != .daily || habit.targetCount == 1 {
+        if progress.isRest {
+            Button {
+                Task { await vm.setRest(habit, false) }
+            } label: {
+                Image(systemName: "moon.zzz.fill")
+                    .font(.system(size: 26))
+                    .foregroundStyle(.indigo)
+            }
+            .buttonStyle(.plain)
+        } else if habit.period != .daily || habit.targetCount == 1 {
             let doneToday = progress.todayCount > 0
             Button {
                 Task { await vm.toggle(habit) }

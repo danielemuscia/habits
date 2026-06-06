@@ -7,6 +7,8 @@ struct HabitProgress {
     let currentCount: Int
     /// Conteggio registrato oggi (per il pulsante della vista Today).
     let todayCount: Int
+    /// Il giorno selezionato è marcato come "riposo".
+    var isRest: Bool = false
 
     var target: Int { habit.targetCount }
 
@@ -25,14 +27,16 @@ struct HabitProgress {
 
         var periodCount = 0
         var todayCount = 0
+        var isRest = false
         for entry in entries where entry.habitId == habit.id {
             if interval.contains(entry.entryDate) {
                 periodCount += entry.count
             }
             if calendar.isDate(entry.entryDate, inSameDayAs: startOfDay) {
                 todayCount += entry.count
+                if entry.skipped { isRest = true }
             }
         }
-        return HabitProgress(habit: habit, currentCount: periodCount, todayCount: todayCount)
+        return HabitProgress(habit: habit, currentCount: periodCount, todayCount: todayCount, isRest: isRest)
     }
 }

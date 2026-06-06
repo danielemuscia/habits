@@ -57,6 +57,8 @@ struct HeatCell: Identifiable {
     /// Quanto è "pieno" [0, 1+]: count / obiettivo della cella.
     let fraction: Double
     let isComplete: Bool
+    /// Periodo di riposo: stato neutro (non rompe la streak, escluso dal completamento).
+    let isRest: Bool
 }
 
 /// Statistiche aggregate per una singola abitudine, riferite alla finestra scelta.
@@ -79,6 +81,8 @@ struct HabitStats: Identifiable {
     let header: [String]?
     /// Mostra l'etichetta sopra ogni cella (settimana/anno).
     let showCellLabels: Bool
+    /// Almeno una cella è un giorno di riposo (per mostrare la legenda).
+    let hasRest: Bool
     /// Descrizione della finestra mostrata.
     let subtitle: String
 }
@@ -135,6 +139,9 @@ final class AnalyticsViewModel: ObservableObject {
         let windowStart = range.start(from: end, calendar: calendar)
         let cellTarget = self.cellTarget(for: habit, component: component)
 
+        // Giorni marcati come riposo (inizio giornata), per scontare le aspettative.
+        let restDays = Set(entries.filter(\.skipped).map { calendar.startOfDay(for: $0.entryDate) })
+
         var cells: [HeatCell] = []
         for offset in 0..<500 {
             guard let ref = calendar.date(byAdding: component, value: -offset, to: end) else { break }
@@ -142,35 +149,49 @@ final class AnalyticsViewModel: ObservableObject {
                 ?? DateInterval(start: calendar.startOfDay(for: ref), duration: 86_400)
             // Manteniamo sempre la cella corrente (offset 0); fermiamo quando è fuori finestra.
             if offset > 0 && interval.end <= windowStart { break }
+
             let count = entries
                 .filter { interval.contains($0.entryDate) }
                 .reduce(0) { $0 + $1.count }
+
+            // Quanti giorni di questa cella sono di riposo: scontano l'obiettivo atteso.
+            let totalDays = max(1, Int((interval.duration / 86_400).rounded()))
+            let restInCell = restDays.filter { interval.contains($0) }.count
+            let isRest = restInCell >= totalDays   // intera cella a riposo
+            let activeFactor = Double(totalDays - restInCell) / Double(totalDays)
+            let effectiveTarget = isRest ? 0 : max(1, Int((Double(cellTarget) * activeFactor).rounded()))
+
             cells.append(HeatCell(
                 date: interval.start,
                 label: cellLabel(for: interval.start, component: component),
                 count: count,
-                fraction: cellTarget > 0 ? Double(count) / Double(cellTarget) : 0,
-                isComplete: count >= cellTarget
+                fraction: effectiveTarget > 0 ? Double(count) / Double(effectiveTarget) : 0,
+                isComplete: !isRest && count >= effectiveTarget,
+                isRest: isRest
             ))
         }
         cells.reverse() // dal più vecchio al più recente
 
-        // Streak corrente: dalle celle più recenti all'indietro.
+        // Streak corrente: dalle celle più recenti all'indietro. Il riposo è trasparente.
         var currentStreak = 0
         for cell in cells.reversed() {
+            if cell.isRest { continue }
             if cell.isComplete { currentStreak += 1 } else { break }
         }
-        // Streak migliore.
+        // Streak migliore: il riposo non rompe né incrementa.
         var bestStreak = 0, running = 0
         for cell in cells {
+            if cell.isRest { continue }
             if cell.isComplete { running += 1; bestStreak = max(bestStreak, running) }
             else { running = 0 }
         }
 
-        // Completamento medio della finestra: somma riempita / somma attesa, con cap per cella.
-        let filled = cells.reduce(0) { $0 + min($1.count, cellTarget) }
-        let expected = cellTarget * cells.count
-        let completion = expected > 0 ? Double(filled) / Double(expected) : 0
+        // Completamento medio della finestra = media di quanto sono piene le celle,
+        // escludendo le celle di riposo.
+        let active = cells.filter { !$0.isRest }
+        let completion = active.isEmpty
+            ? 0
+            : active.map { min(1, $0.fraction) }.reduce(0, +) / Double(active.count)
 
         // Layout della griglia.
         let columns = (range == .month) ? 7 : cells.count
@@ -192,6 +213,7 @@ final class AnalyticsViewModel: ObservableObject {
             leadingBlanks: leadingBlanks,
             header: header,
             showCellLabels: range == .week || range == .year,
+            hasRest: cells.contains(where: \.isRest),
             subtitle: range.subtitle
         )
     }

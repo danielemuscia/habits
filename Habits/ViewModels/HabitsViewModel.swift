@@ -84,6 +84,19 @@ final class HabitsViewModel: ObservableObject {
         await setCount(habit, to: current > 0 ? 0 : 1)
     }
 
+    /// Marca/smarca il giorno selezionato come "riposo".
+    func setRest(_ habit: Habit, _ rest: Bool) async {
+        guard let userId else { return }
+        do {
+            let updated = try await service.setRest(
+                habitId: habit.id, userId: userId, date: selectedDate, skipped: rest
+            )
+            mergeEntry(updated)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func setCount(_ habit: Habit, to count: Int) async {
         guard let userId else { return }
         do {

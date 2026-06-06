@@ -77,6 +77,10 @@ private struct HabitStatsCard: View {
             HStack(spacing: 16) {
                 Label("serie di \(stat.currentStreak)", systemImage: "flame.fill")
                 Label("record \(stat.bestStreak)", systemImage: "trophy.fill")
+                if stat.hasRest {
+                    Spacer()
+                    Label("riposo", systemImage: "moon.fill")
+                }
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
@@ -164,11 +168,19 @@ private struct HeatmapView: View {
                 RoundedRectangle(cornerRadius: cellSize * 0.24)
                     .fill(cellColor(cell))
                     .frame(width: cellSize, height: cellSize)
+                    .overlay {
+                        if cell.isRest {
+                            Image(systemName: "moon.fill")
+                                .font(.system(size: cellSize * 0.5))
+                                .foregroundStyle(.white.opacity(0.95))
+                        }
+                    }
             }
         }
     }
 
     private func cellColor(_ cell: HeatCell) -> Color {
+        if cell.isRest { return Color(.systemGray3) }
         guard cell.fraction > 0 else { return Color(.systemGray5) }
         return color.opacity(0.30 + 0.70 * min(1, cell.fraction))
     }
