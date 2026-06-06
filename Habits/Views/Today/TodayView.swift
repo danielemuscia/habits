@@ -32,7 +32,7 @@ struct TodayView: View {
 
     private var content: some View {
         ScrollView {
-            DateStripView(selected: $vm.selectedDate)
+            DateStripView(selected: $vm.selectedDate, scrollToTodayToken: vm.scrollToTodayToken)
                 .padding(.vertical, 8)
 
             LazyVStack(spacing: 12) {
