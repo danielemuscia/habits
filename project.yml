@@ -50,6 +50,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: "39ZSPD3CUW"
+        CODE_SIGN_ENTITLEMENTS: Habits/Habits.entitlements
     dependencies:
       - package: Supabase
         product: Supabase

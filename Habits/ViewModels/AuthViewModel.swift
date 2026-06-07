@@ -58,6 +58,10 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
+    func signInWithApple(idToken: String, nonce: String) async {
+        await perform { try await self.auth.signInWithApple(idToken: idToken, nonce: nonce) }
+    }
+
     func signOut() async {
         await perform { try await self.auth.signOut() }
     }

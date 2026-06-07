@@ -1,12 +1,18 @@
 import SwiftUI
+import AuthenticationServices
+import CryptoKit
 
 /// Schermata di login / registrazione.
 struct AuthView: View {
     @EnvironmentObject private var auth: AuthViewModel
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var isSignUp = false
     @State private var email = ""
     @State private var password = ""
+    /// Nonce in chiaro generato per la richiesta Apple corrente; serve poi a
+    /// Supabase per validare l'identity token.
+    @State private var appleNonce: String?
 
     private var canSubmit: Bool {
         email.contains("@") && password.count >= 6 && !auth.isWorking
@@ -73,6 +79,27 @@ struct AuthView: View {
             }
             .disabled(!canSubmit)
 
+            HStack {
+                VStack { Divider() }
+                Text("oppure")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                VStack { Divider() }
+            }
+
+            SignInWithAppleButton(.continue) { request in
+                let nonce = Self.randomNonceString()
+                appleNonce = nonce
+                request.requestedScopes = [.fullName, .email]
+                request.nonce = Self.sha256(nonce)
+            } onCompletion: { result in
+                handleAppleResult(result)
+            }
+            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+            .frame(height: 50)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .disabled(auth.isWorking)
+
             Button {
                 withAnimation { isSignUp.toggle() }
                 auth.errorMessage = nil
@@ -84,5 +111,42 @@ struct AuthView: View {
             Spacer()
         }
         .padding(.horizontal, 28)
+    }
+
+    /// Estrae l'identity token dal risultato Apple e lo passa a Supabase.
+    private func handleAppleResult(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            guard
+                let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                let tokenData = credential.identityToken,
+                let idToken = String(data: tokenData, encoding: .utf8),
+                let nonce = appleNonce
+            else {
+                auth.errorMessage = "Accesso con Apple non riuscito."
+                return
+            }
+            Task { await auth.signInWithApple(idToken: idToken, nonce: nonce) }
+        case .failure(let error):
+            // L'annullamento da parte dell'utente non è un errore da mostrare.
+            if (error as? ASAuthorizationError)?.code == .canceled { return }
+            auth.errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Nonce casuale crittograficamente sicuro (inviato in chiaro a Supabase).
+    private static func randomNonceString(length: Int = 32) -> String {
+        var bytes = [UInt8](repeating: 0, count: length)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        precondition(status == errSecSuccess, "SecRandomCopyBytes fallito: \(status)")
+        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        return String(bytes.map { charset[Int($0) % charset.count] })
+    }
+
+    /// SHA256 del nonce, inviato ad Apple nella richiesta.
+    private static func sha256(_ input: String) -> String {
+        SHA256.hash(data: Data(input.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
     }
 }

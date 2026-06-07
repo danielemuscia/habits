@@ -22,6 +22,14 @@ struct AuthService {
         try await auth.signOut()
     }
 
+    /// Login con Sign in with Apple: scambia l'identity token OIDC con Supabase.
+    /// `nonce` è il nonce *in chiaro* (Apple ha ricevuto il suo SHA256).
+    func signInWithApple(idToken: String, nonce: String) async throws {
+        _ = try await auth.signInWithIdToken(
+            credentials: .init(provider: .apple, idToken: idToken, nonce: nonce)
+        )
+    }
+
     /// Stream degli eventi di autenticazione (login/logout/refresh).
     var authStateChanges: AsyncStream<(event: AuthChangeEvent, session: Session?)> {
         AsyncStream { continuation in

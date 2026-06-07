@@ -5,7 +5,7 @@ App iOS minimale (stile Apple) per monitorare le abitudini, con backend in cloud
 - **Oggi** — vista giornaliera con le abitudini da spuntare (toggle o conteggio +/−).
 - **Abitudini** — crea/modifica abitudini con frequenza target (N volte per giorno / settimana / mese / anno), icona e colore.
 - **Analytics** — trend, streak corrente, record e tasso di completamento per ogni abitudine.
-- **Account** — login/registrazione via email; ogni utente vede solo i propri dati (Row Level Security).
+- **Account** — login/registrazione via email o **Accedi con Apple**; ogni utente vede solo i propri dati (Row Level Security).
 
 ## Stack
 
@@ -39,6 +39,13 @@ project.yml                 # definizione progetto (XcodeGen)
 2. Apri **SQL Editor** e incolla/esegui in ordine i file in [`supabase/migrations/`](supabase/migrations/): `0001_init.sql` (tabelle `habits`/`habit_entries` + policy RLS), `0002_rest_days.sql` (giorni di riposo) e `0003_multiple_per_day.sql` (più completamenti al giorno).
 3. (Opzionale ma comodo in sviluppo) **Authentication → Providers → Email**: disattiva *Confirm email* così la registrazione logga subito l'utente senza passare dalla mail.
 4. Da **Project Settings → API** copia **Project URL** e **anon public key**.
+
+### 1b. Abilita "Accedi con Apple"
+
+Login nativo via Apple (id token OIDC). Serve configurazione su due lati:
+
+- **Apple Developer** ([developer.apple.com](https://developer.apple.com) → Certificates, Identifiers & Profiles → Identifiers): nell'App ID `com.danielemuscia.habits` abilita la capability **Sign in with Apple**. In locale è già attiva via `Habits/Habits.entitlements` + signing automatico col team `39ZSPD3CUW`.
+- **Supabase** (**Authentication → Providers → Apple**): abilita il provider e, nel campo **Client IDs** (authorized client IDs), aggiungi il bundle id `com.danielemuscia.habits`. Per il solo login nativo da app non servono Services ID / secret key (quelli servono all'OAuth web).
 
 ### 2. Configura i secret
 
@@ -92,4 +99,3 @@ Entrambe le tabelle hanno RLS: ogni riga è filtrata per `user_id = auth.uid()`.
 - Sync realtime (Supabase Realtime)
 - Widget e Live Activities
 - Reorder drag&drop e archiviazione abitudini
-- Accesso con Apple
