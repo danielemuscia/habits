@@ -1,7 +1,6 @@
 import Foundation
 
 /// Periodicità con cui un'abitudine va ripetuta.
-/// Allineata all'enum `habit_period` su Postgres/Supabase.
 enum HabitPeriod: String, Codable, CaseIterable, Identifiable, Sendable {
     case daily
     case weekly

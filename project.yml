@@ -22,23 +22,12 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 
-packages:
-  Supabase:
-    url: https://github.com/supabase/supabase-swift
-    from: "2.0.0"
-
 targets:
   Habits:
     type: application
     platform: iOS
     sources:
       - path: Habits
-        excludes:
-          - "Config/Secrets.xcconfig"
-          - "Config/Secrets.example.xcconfig"
-    configFiles:
-      Debug: Habits/Config/Base.xcconfig
-      Release: Habits/Config/Base.xcconfig
     settings:
       base:
         INFOPLIST_FILE: Habits/Resources/Info.plist
@@ -51,9 +40,6 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: "39ZSPD3CUW"
         CODE_SIGN_ENTITLEMENTS: Habits/Habits.entitlements
-    dependencies:
-      - package: Supabase
-        product: Supabase
     postBuildScripts:
       # Build number automatico: usa il numero di commit git, così cresce a ogni
       # commit senza interventi manuali (richiesto da App Store/TestFlight).

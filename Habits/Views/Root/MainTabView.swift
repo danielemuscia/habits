@@ -1,8 +1,9 @@
 import SwiftUI
+import SwiftData
 
 /// Tab bar principale dell'app.
 struct MainTabView: View {
-    let userId: UUID
+    @Environment(\.modelContext) private var context
     @StateObject private var habitsVM = HabitsViewModel()
 
     var body: some View {
@@ -18,9 +19,6 @@ struct MainTabView: View {
         }
         .tint(.accentColor)
         .environmentObject(habitsVM)
-        .task {
-            habitsVM.userId = userId
-            await habitsVM.load()
-        }
+        .task { habitsVM.configure(context) }
     }
 }

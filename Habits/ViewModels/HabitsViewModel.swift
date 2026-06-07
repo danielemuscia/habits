@@ -1,26 +1,32 @@
 import Foundation
+import SwiftData
 
-/// ViewModel principale: gestisce le abitudini e i log della vista Today.
+/// ViewModel principale: gestisce le abitudini e i log, su store locale SwiftData.
 @MainActor
 final class HabitsViewModel: ObservableObject {
     @Published var habits: [Habit] = []
     @Published var entries: [HabitEntry] = []
     @Published var selectedDate: Date = Date()
-    @Published var isLoading = false
-    @Published var errorMessage: String?
     /// Incrementato a ogni tap su "Oggi" per far scrollare la striscia delle date.
     @Published var scrollToTodayToken = 0
+    /// Cambia a ogni modifica dei dati: usato altrove (es. Analytics) per ricalcolare.
+    @Published var dataVersion = 0
 
-    private let service = HabitService()
+    private var context: ModelContext?
     private var calendar: Calendar = {
         var c = Calendar.current
         c.firstWeekday = 2 // lunedì
         return c
     }()
 
-    var userId: UUID?
-
     var isToday: Bool { calendar.isDateInToday(selectedDate) }
+
+    /// Collega lo store e carica i dati. Va chiamato una volta dal `MainTabView`.
+    func configure(_ context: ModelContext) {
+        guard self.context == nil else { return }
+        self.context = context
+        reload()
+    }
 
     func goToToday() {
         selectedDate = Date()
@@ -29,28 +35,15 @@ final class HabitsViewModel: ObservableObject {
 
     // MARK: - Loading
 
-    func load() async {
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
-        do {
-            async let habitsResult = service.fetchHabits()
-            let (start, end) = entriesWindow()
-            async let entriesResult = service.fetchEntries(from: start, to: end)
-            habits = try await habitsResult
-            entries = try await entriesResult
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    /// Finestra di log da caricare: dall'inizio dell'anno corrente a fine giornata selezionata.
-    /// Copre la finestra del periodo corrente per ogni periodicità.
-    private func entriesWindow() -> (Date, Date) {
-        let yearStart = calendar.dateInterval(of: .year, for: selectedDate)?.start
-            ?? calendar.startOfDay(for: selectedDate)
-        let end = calendar.startOfDay(for: selectedDate)
-        return (yearStart, end)
+    func reload() {
+        guard let context else { return }
+        let habitsDescriptor = FetchDescriptor<Habit>(
+            predicate: #Predicate { $0.archived == false },
+            sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.createdAt)]
+        )
+        habits = (try? context.fetch(habitsDescriptor)) ?? []
+        entries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
+        dataVersion &+= 1
     }
 
     // MARK: - Progress
@@ -66,72 +59,58 @@ final class HabitsViewModel: ObservableObject {
     // MARK: - Logging (Today)
 
     /// Aumenta di 1 il conteggio del giorno selezionato.
-    func increment(_ habit: Habit) async {
-        let current = progress(for: habit).todayCount
-        await setCount(habit, to: current + 1)
+    func increment(_ habit: Habit) {
+        setCount(habit, to: progress(for: habit).todayCount + 1)
     }
 
     /// Diminuisce di 1 (non sotto zero).
-    func decrement(_ habit: Habit) async {
+    func decrement(_ habit: Habit) {
         let current = progress(for: habit).todayCount
         guard current > 0 else { return }
-        await setCount(habit, to: current - 1)
+        setCount(habit, to: current - 1)
     }
 
-    /// Toggle per abitudini con target giornaliero = 1.
-    func toggle(_ habit: Habit) async {
+    /// Toggle per abitudini "a spunta" (una volta al giorno).
+    func toggle(_ habit: Habit) {
         let current = progress(for: habit).todayCount
-        await setCount(habit, to: current > 0 ? 0 : 1)
+        setCount(habit, to: current > 0 ? 0 : 1)
     }
 
     /// Marca/smarca il giorno selezionato come "riposo".
-    func setRest(_ habit: Habit, _ rest: Bool) async {
-        guard let userId else { return }
-        do {
-            let updated = try await service.setRest(
-                habitId: habit.id, userId: userId, date: selectedDate, skipped: rest
-            )
-            mergeEntry(updated)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+    func setRest(_ habit: Habit, _ rest: Bool) {
+        upsertEntry(habit, count: 0, skipped: rest)
     }
 
-    private func setCount(_ habit: Habit, to count: Int) async {
-        guard let userId else { return }
-        do {
-            let updated = try await service.setEntryCount(
-                habitId: habit.id, userId: userId, date: selectedDate, count: count
-            )
-            mergeEntry(updated)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+    private func setCount(_ habit: Habit, to count: Int) {
+        upsertEntry(habit, count: max(0, count), skipped: false)
     }
 
-    private func mergeEntry(_ entry: HabitEntry) {
-        if let idx = entries.firstIndex(where: { $0.id == entry.id }) {
-            entries[idx] = entry
-        } else if let idx = entries.firstIndex(where: {
-            $0.habitId == entry.habitId && calendar.isDate($0.entryDate, inSameDayAs: entry.entryDate)
+    /// Crea o aggiorna l'entry del giorno selezionato per l'abitudine (unicità
+    /// per `(habitId, entryDate)` garantita qui, non dal DB).
+    private func upsertEntry(_ habit: Habit, count: Int, skipped: Bool) {
+        guard let context else { return }
+        let day = calendar.startOfDay(for: selectedDate)
+        if let existing = entries.first(where: {
+            $0.habitId == habit.id && calendar.isDate($0.entryDate, inSameDayAs: day)
         }) {
-            entries[idx] = entry
+            existing.count = count
+            existing.skipped = skipped
         } else {
-            entries.append(entry)
+            context.insert(HabitEntry(habitId: habit.id, entryDate: day, count: count, skipped: skipped))
         }
+        save()
     }
 
     // MARK: - CRUD abitudini
 
     func createHabit(
-        name: String, description: String?, icon: String, color: String,
+        name: String, details: String?, icon: String, color: String,
         targetCount: Int, period: HabitPeriod, allowsMultiplePerDay: Bool
-    ) async {
-        guard let userId else { return }
-        let payload = NewHabit(
-            userId: userId,
+    ) {
+        guard let context else { return }
+        let habit = Habit(
             name: name,
-            description: description?.isEmpty == true ? nil : description,
+            details: details?.isEmpty == true ? nil : details,
             icon: icon,
             color: color,
             targetCount: max(1, targetCount),
@@ -139,42 +118,40 @@ final class HabitsViewModel: ObservableObject {
             allowsMultiplePerDay: allowsMultiplePerDay,
             sortOrder: habits.count
         )
-        do {
-            let created = try await service.createHabit(payload)
-            habits.append(created)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        context.insert(habit)
+        save()
     }
 
-    func updateHabit(_ habit: Habit, with update: HabitUpdate) async {
-        do {
-            let updated = try await service.updateHabit(id: habit.id, with: update)
-            if let idx = habits.firstIndex(where: { $0.id == updated.id }) {
-                if updated.archived {
-                    habits.remove(at: idx)
-                } else {
-                    habits[idx] = updated
-                }
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+    func updateHabit(
+        _ habit: Habit, name: String, details: String?, icon: String, color: String,
+        targetCount: Int, period: HabitPeriod, allowsMultiplePerDay: Bool
+    ) {
+        habit.name = name
+        habit.details = details?.isEmpty == true ? nil : details
+        habit.icon = icon
+        habit.color = color
+        habit.targetCount = max(1, targetCount)
+        habit.period = period
+        habit.allowsMultiplePerDay = allowsMultiplePerDay
+        save()
     }
 
-    func deleteHabit(_ habit: Habit) async {
-        do {
-            try await service.deleteHabit(id: habit.id)
-            habits.removeAll { $0.id == habit.id }
-            entries.removeAll { $0.habitId == habit.id }
-        } catch {
-            errorMessage = error.localizedDescription
+    func deleteHabit(_ habit: Habit) {
+        guard let context else { return }
+        for entry in entries where entry.habitId == habit.id {
+            context.delete(entry)
         }
+        context.delete(habit)
+        save()
     }
 
-    func reset() {
-        habits = []
-        entries = []
-        userId = nil
+    private func save() {
+        guard let context else { return }
+        do {
+            try context.save()
+        } catch {
+            assertionFailure("Errore di salvataggio SwiftData: \(error)")
+        }
+        reload()
     }
 }

@@ -91,39 +91,26 @@ struct HabitStats: Identifiable {
 @MainActor
 final class AnalyticsViewModel: ObservableObject {
     @Published var stats: [HabitStats] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String?
     /// Finestra selezionata; al cambio le statistiche si ricalcolano sui dati già caricati.
     @Published var range: AnalyticsRange = .week {
         didSet { rebuild() }
     }
 
-    private let service = HabitService()
     private var calendar: Calendar = {
         var c = Calendar.current
         c.firstWeekday = 2
         return c
     }()
 
-    /// Dati grezzi dell'ultimo caricamento, per ricalcolare al cambio di finestra senza refetch.
+    /// Dati grezzi dell'ultimo caricamento, per ricalcolare al cambio di finestra.
     private var loadedHabits: [Habit] = []
     private var loadedEntries: [HabitEntry] = []
 
-    func load(habits: [Habit]) async {
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
-
-        let end = Date()
-        guard let start = calendar.date(byAdding: .year, value: -1, to: end) else { return }
-
-        do {
-            loadedEntries = try await service.fetchEntries(from: start, to: end)
-            loadedHabits = habits
-            rebuild()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+    /// Ricalcola le statistiche dai dati locali già caricati dallo store.
+    func load(habits: [Habit], entries: [HabitEntry]) {
+        loadedHabits = habits
+        loadedEntries = entries
+        rebuild()
     }
 
     /// Ricostruisce le statistiche dai dati caricati, per la finestra corrente.

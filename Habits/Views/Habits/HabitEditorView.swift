@@ -27,7 +27,7 @@ struct HabitEditorView: View {
     init(habit: Habit? = nil) {
         self.habit = habit
         _name = State(initialValue: habit?.name ?? "")
-        _description = State(initialValue: habit?.description ?? "")
+        _description = State(initialValue: habit?.details ?? "")
         _icon = State(initialValue: habit?.icon ?? HabitIcons.symbols.first!)
         _color = State(initialValue: habit?.color ?? HabitPalette.colors.first!)
         _targetCount = State(initialValue: habit?.targetCount ?? 1)
@@ -88,10 +88,8 @@ struct HabitEditorView: View {
                     Section {
                         Button(role: .destructive) {
                             guard let habit else { return }
-                            Task {
-                                await vm.deleteHabit(habit)
-                                dismiss()
-                            }
+                            vm.deleteHabit(habit)
+                            dismiss()
                         } label: {
                             Label("Elimina abitudine", systemImage: "trash")
                         }
@@ -148,31 +146,18 @@ struct HabitEditorView: View {
     private func save() {
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         let trimmedDesc = description.trimmingCharacters(in: .whitespaces)
-        Task {
-            if let habit {
-                let update = HabitUpdate(
-                    name: trimmedName,
-                    description: trimmedDesc.isEmpty ? nil : trimmedDesc,
-                    icon: icon,
-                    color: color,
-                    targetCount: targetCount,
-                    period: period,
-                    allowsMultiplePerDay: allowsMultiplePerDay,
-                    archived: false
-                )
-                await vm.updateHabit(habit, with: update)
-            } else {
-                await vm.createHabit(
-                    name: trimmedName,
-                    description: trimmedDesc.isEmpty ? nil : trimmedDesc,
-                    icon: icon,
-                    color: color,
-                    targetCount: targetCount,
-                    period: period,
-                    allowsMultiplePerDay: allowsMultiplePerDay
-                )
-            }
-            dismiss()
+        let details = trimmedDesc.isEmpty ? nil : trimmedDesc
+        if let habit {
+            vm.updateHabit(
+                habit, name: trimmedName, details: details, icon: icon, color: color,
+                targetCount: targetCount, period: period, allowsMultiplePerDay: allowsMultiplePerDay
+            )
+        } else {
+            vm.createHabit(
+                name: trimmedName, details: details, icon: icon, color: color,
+                targetCount: targetCount, period: period, allowsMultiplePerDay: allowsMultiplePerDay
+            )
         }
+        dismiss()
     }
 }

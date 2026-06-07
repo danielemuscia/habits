@@ -7,9 +7,7 @@ struct TodayView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if vm.isLoading && vm.habits.isEmpty {
-                    ProgressView().controlSize(.large)
-                } else if vm.habits.isEmpty {
+                if vm.habits.isEmpty {
                     EmptyStateView(
                         icon: "sparkles",
                         title: "Nessuna abitudine",
@@ -43,7 +41,7 @@ struct TodayView: View {
             .padding(.horizontal)
             .padding(.bottom, 24)
         }
-        .refreshable { await vm.load() }
+        .refreshable { vm.reload() }
     }
 
     private var navTitle: String {
@@ -121,13 +119,13 @@ private struct HabitTodayRow: View {
     private var restMenu: some View {
         if progress.isRest {
             Button {
-                Task { await vm.setRest(habit, false) }
+                vm.setRest(habit, false)
             } label: {
                 Label("Annulla riposo", systemImage: "arrow.uturn.backward")
             }
         } else {
             Button {
-                Task { await vm.setRest(habit, true) }
+                vm.setRest(habit, true)
             } label: {
                 Label("Segna giorno di riposo", systemImage: "moon.zzz.fill")
             }
@@ -146,7 +144,7 @@ private struct HabitTodayRow: View {
     private var actionControl: some View {
         if progress.isRest {
             Button {
-                Task { await vm.setRest(habit, false) }
+                vm.setRest(habit, false)
             } label: {
                 Image(systemName: "moon.zzz.fill")
                     .font(.system(size: 26))
@@ -156,7 +154,7 @@ private struct HabitTodayRow: View {
         } else if !habit.usesDailyCounter {
             let doneToday = progress.todayCount > 0
             Button {
-                Task { await vm.toggle(habit) }
+                vm.toggle(habit)
             } label: {
                 Image(systemName: doneToday ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 28))
@@ -166,7 +164,7 @@ private struct HabitTodayRow: View {
         } else {
             HStack(spacing: 10) {
                 Button {
-                    Task { await vm.decrement(habit) }
+                    vm.decrement(habit)
                 } label: {
                     Image(systemName: "minus.circle.fill")
                         .font(.title2)
@@ -180,7 +178,7 @@ private struct HabitTodayRow: View {
                     .frame(minWidth: 22)
 
                 Button {
-                    Task { await vm.increment(habit) }
+                    vm.increment(habit)
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.title2)
