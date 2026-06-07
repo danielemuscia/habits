@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import HabitsKit
 
 /// Tab bar principale dell'app.
 struct MainTabView: View {

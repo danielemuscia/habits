@@ -1,5 +1,7 @@
 import Foundation
 import SwiftData
+import WidgetKit
+import HabitsKit
 
 /// ViewModel principale: gestisce le abitudini e i log, su store locale SwiftData.
 @MainActor
@@ -153,5 +155,6 @@ final class HabitsViewModel: ObservableObject {
             assertionFailure("Errore di salvataggio SwiftData: \(error)")
         }
         reload()
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }

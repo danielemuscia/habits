@@ -1,4 +1,5 @@
 import SwiftUI
+import HabitsKit
 
 /// Form per creare o modificare un'abitudine.
 struct HabitEditorView: View {

@@ -2,7 +2,7 @@ import SwiftUI
 
 extension Color {
     /// Crea un Color da una stringa hex tipo "#34C759" o "34C759".
-    init?(hex: String) {
+    public init?(hex: String) {
         var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.hasPrefix("#") { s.removeFirst() }
         guard s.count == 6, let value = UInt64(s, radix: 16) else { return nil }
@@ -14,8 +14,8 @@ extension Color {
 }
 
 /// Palette di colori suggeriti per le abitudini (stile iOS).
-enum HabitPalette {
-    static let colors: [String] = [
+public enum HabitPalette {
+    public static let colors: [String] = [
         "#34C759", // green
         "#007AFF", // blue
         "#FF3B30", // red
@@ -29,8 +29,8 @@ enum HabitPalette {
 }
 
 /// SF Symbols suggeriti per le abitudini.
-enum HabitIcons {
-    static let symbols: [String] = [
+public enum HabitIcons {
+    public static let symbols: [String] = [
         "star.fill", "drop.fill", "flame.fill", "heart.fill", "bolt.fill",
         "book.fill", "dumbbell.fill", "figure.run", "leaf.fill", "moon.fill",
         "cup.and.saucer.fill", "pencil", "music.note", "brain.head.profile",

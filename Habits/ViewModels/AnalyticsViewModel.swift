@@ -1,4 +1,5 @@
 import Foundation
+import HabitsKit
 
 /// Finestra temporale scelta dall'utente per gli Analytics.
 /// Determina quanto indietro guardare e la granularità delle celle della heatmap.

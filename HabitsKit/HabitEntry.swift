@@ -5,18 +5,16 @@ import SwiftData
 /// Un record per `(habitId, entryDate)`; l'unicità per giorno è garantita in
 /// codice (CloudKit non supporta vincoli di unicità).
 @Model
-final class HabitEntry {
-    var id: UUID = UUID()
-    /// Riferimento all'abitudine (per id, non come relazione: la logica di
-    /// avanzamento lavora su array piatti filtrati per `habitId`).
-    var habitId: UUID = UUID()
+public final class HabitEntry {
+    public var id: UUID = UUID()
+    public var habitId: UUID = UUID()
     /// Giorno del log, normalizzato a mezzanotte locale.
-    var entryDate: Date = Date.now
-    var count: Int = 0
+    public var entryDate: Date = Date.now
+    public var count: Int = 0
     /// Giorno di riposo: stato neutro, non conta come fatto né come mancato.
-    var skipped: Bool = false
+    public var skipped: Bool = false
 
-    init(
+    public init(
         id: UUID = UUID(),
         habitId: UUID,
         entryDate: Date,

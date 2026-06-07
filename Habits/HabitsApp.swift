@@ -1,4 +1,5 @@
 import SwiftUI
+import HabitsKit
 
 @main
 struct HabitsApp: App {

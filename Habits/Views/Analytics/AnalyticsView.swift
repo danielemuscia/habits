@@ -1,4 +1,5 @@
 import SwiftUI
+import HabitsKit
 
 /// Sezione Analytics: heatmap di completamento, streak e percentuale per abitudine,
 /// sulla finestra temporale scelta dall'utente.
