@@ -184,7 +184,7 @@ final class AnalyticsViewModel: ObservableObject {
         let active = cells.filter { !$0.isRest }
         let completion = active.isEmpty
             ? 0
-            : active.map { $0.fraction }.reduce(0, +) / Double(active.count)
+            : active.map { min(1, $0.fraction) }.reduce(0, +) / Double(active.count)
 
         // Layout della griglia.
         let columns = (range == .month) ? 7 : cells.count
