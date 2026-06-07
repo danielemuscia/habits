@@ -134,11 +134,14 @@ private struct HabitTodayRow: View {
         }
     }
 
-    /// Lo stepper +/- ha senso solo per più completamenti nello *stesso* giorno
-    /// (target giornaliero > 1). Negli altri casi si completa una volta al giorno con
-    /// un toggle: la spunta riflette "fatto **oggi**" (`todayCount`), mentre l'anello e
-    /// il testo a sinistra mostrano l'avanzamento del periodo. Si va oltre il target
-    /// completando più giorni/periodi (es. "6/5"), quindi il toggle non si disabilita.
+    /// Lo stepper +/- serve quando l'abitudine ammette più completamenti nello
+    /// *stesso* giorno (`habit.usesDailyCounter`): target giornaliero > 1, oppure
+    /// l'utente ha attivato "Più volte al giorno" anche con obiettivo settimanale/
+    /// mensile (es. 2 sessioni oggi verso "5 a settimana"). Negli altri casi si
+    /// completa una volta al giorno con un toggle: la spunta riflette "fatto
+    /// **oggi**" (`todayCount`), mentre l'anello e il testo a sinistra mostrano
+    /// l'avanzamento del periodo. Si va oltre il target completando più giorni/
+    /// periodi (es. "6/5"), quindi il toggle non si disabilita.
     @ViewBuilder
     private var actionControl: some View {
         if progress.isRest {
@@ -150,7 +153,7 @@ private struct HabitTodayRow: View {
                     .foregroundStyle(.indigo)
             }
             .buttonStyle(.plain)
-        } else if habit.period != .daily || habit.targetCount == 1 {
+        } else if !habit.usesDailyCounter {
             let doneToday = progress.todayCount > 0
             Button {
                 Task { await vm.toggle(habit) }

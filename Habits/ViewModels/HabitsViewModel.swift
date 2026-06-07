@@ -125,7 +125,7 @@ final class HabitsViewModel: ObservableObject {
 
     func createHabit(
         name: String, description: String?, icon: String, color: String,
-        targetCount: Int, period: HabitPeriod
+        targetCount: Int, period: HabitPeriod, allowsMultiplePerDay: Bool
     ) async {
         guard let userId else { return }
         let payload = NewHabit(
@@ -136,6 +136,7 @@ final class HabitsViewModel: ObservableObject {
             color: color,
             targetCount: max(1, targetCount),
             period: period,
+            allowsMultiplePerDay: allowsMultiplePerDay,
             sortOrder: habits.count
         )
         do {

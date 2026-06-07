@@ -14,8 +14,15 @@ struct HabitEditorView: View {
     @State private var color: String
     @State private var targetCount: Int
     @State private var period: HabitPeriod
+    @State private var allowsMultiplePerDay: Bool
 
     private var isEditing: Bool { habit != nil }
+
+    /// Un obiettivo giornaliero > 1 implica già più completamenti al giorno
+    /// (contatore), quindi l'opzione esplicita sarebbe ridondante: la nascondiamo.
+    private var multiplePerDayIsImplicit: Bool {
+        period == .daily && targetCount > 1
+    }
 
     init(habit: Habit? = nil) {
         self.habit = habit
@@ -25,6 +32,7 @@ struct HabitEditorView: View {
         _color = State(initialValue: habit?.color ?? HabitPalette.colors.first!)
         _targetCount = State(initialValue: habit?.targetCount ?? 1)
         _period = State(initialValue: habit?.period ?? .daily)
+        _allowsMultiplePerDay = State(initialValue: habit?.allowsMultiplePerDay ?? false)
     }
 
     private var selectedColor: Color { Color(hex: color) ?? .green }
@@ -57,6 +65,15 @@ struct HabitEditorView: View {
                             .font(.footnote)
                     }
                     .foregroundStyle(.secondary)
+
+                    if !multiplePerDayIsImplicit {
+                        Toggle("Più volte al giorno", isOn: $allowsMultiplePerDay)
+                        Text(allowsMultiplePerDay
+                             ? "Puoi registrarla più volte nello stesso giorno (contatore +/-)."
+                             : "Si spunta una volta al giorno; l'obiettivo si raggiunge in più giorni.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Icona") {
@@ -140,6 +157,7 @@ struct HabitEditorView: View {
                     color: color,
                     targetCount: targetCount,
                     period: period,
+                    allowsMultiplePerDay: allowsMultiplePerDay,
                     archived: false
                 )
                 await vm.updateHabit(habit, with: update)
@@ -150,7 +168,8 @@ struct HabitEditorView: View {
                     icon: icon,
                     color: color,
                     targetCount: targetCount,
-                    period: period
+                    period: period,
+                    allowsMultiplePerDay: allowsMultiplePerDay
                 )
             }
             dismiss()

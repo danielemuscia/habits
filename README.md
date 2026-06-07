@@ -36,7 +36,7 @@ project.yml                 # definizione progetto (XcodeGen)
 ### 1. Crea il progetto Supabase
 
 1. Vai su [supabase.com](https://supabase.com) e crea un nuovo progetto.
-2. Apri **SQL Editor** e incolla/esegui il contenuto di [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql). Crea le tabelle `habits` e `habit_entries` con le policy RLS.
+2. Apri **SQL Editor** e incolla/esegui in ordine i file in [`supabase/migrations/`](supabase/migrations/): `0001_init.sql` (tabelle `habits`/`habit_entries` + policy RLS), `0002_rest_days.sql` (giorni di riposo) e `0003_multiple_per_day.sql` (più completamenti al giorno).
 3. (Opzionale ma comodo in sviluppo) **Authentication → Providers → Email**: disattiva *Confirm email* così la registrazione logga subito l'utente senza passare dalla mail.
 4. Da **Project Settings → API** copia **Project URL** e **anon public key**.
 
@@ -77,6 +77,7 @@ Seleziona un simulatore iOS 17+ e premi **Run**. Registra un account e inizia ad
 
 **habits**
 - `target_count` + `period` (`daily`/`weekly`/`monthly`/`yearly`) = obiettivo, es. *3 volte a settimana*.
+- `allows_multiple_per_day` = se vera, l'abitudine si registra con un contatore +/− (più volte al giorno) anche con obiettivo settimanale/mensile; altrimenti è una spunta una volta al giorno.
 - `icon` (SF Symbol), `color` (hex), `archived`, `sort_order`.
 
 **habit_entries**
