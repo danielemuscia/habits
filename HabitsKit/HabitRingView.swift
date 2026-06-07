@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Anello di avanzamento stile Apple, condiviso tra app e widget.
+/// Anello di avanzamento stile Apple Activity, condiviso tra app e widget.
 ///
 /// `fraction` è il rapporto **non cappato** (currentCount/target): fino a 1
-/// riempie l'anello; oltre 1 disegna un **secondo giro** più chiaro sopra
-/// l'anello pieno, così l'overperformance resta visibile invece di fermarsi.
+/// riempie l'anello; oltre 1 disegna un **secondo giro dello stesso colore** che
+/// si sovrappone all'inizio, con la punta che proietta un'ombra sull'anello
+/// sottostante — così l'overperformance ha profondità invece di fermarsi.
 public struct HabitRingView: View {
     private let fraction: Double
     private let color: Color
@@ -32,7 +33,10 @@ public struct HabitRingView: View {
 
         GeometryReader { geo in
             let dim = min(geo.size.width, geo.size.height)
+            let radius = (dim - lineWidth) / 2
+
             ZStack {
+                // Traccia di sfondo.
                 Circle()
                     .stroke(color.opacity(0.18), lineWidth: lineWidth)
 
@@ -42,13 +46,24 @@ public struct HabitRingView: View {
                     .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))
 
-                // Secondo giro (overperformance): banda più chiara sopra l'anello pieno.
+                // Secondo giro (overperformance): stesso colore, sopra l'anello
+                // pieno, con un'ombra sotto la punta che lo fa "lappare".
                 if overflow > 0 {
                     Circle()
                         .trim(from: 0, to: overflow)
-                        .stroke(.white.opacity(0.7),
-                                style: StrokeStyle(lineWidth: lineWidth * 0.85, lineCap: .round))
+                        .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                         .rotationEffect(.degrees(-90))
+
+                    // Punta con ombra portata sull'anello sottostante.
+                    let angle = Angle(degrees: 360 * overflow - 90)
+                    Circle()
+                        .fill(color)
+                        .frame(width: lineWidth, height: lineWidth)
+                        .shadow(color: .black.opacity(0.45), radius: lineWidth * 0.5, x: 0, y: 0)
+                        .offset(
+                            x: radius * CGFloat(cos(angle.radians)),
+                            y: radius * CGFloat(sin(angle.radians))
+                        )
                 }
 
                 if let icon {
