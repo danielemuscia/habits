@@ -28,5 +28,10 @@
     <array>
         <string>UIInterfaceOrientationPortrait</string>
     </array>
+    <!-- Push silenziosi per la sincronizzazione CloudKit (SwiftData) -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>remote-notification</string>
+    </array>
 </dict>
 </plist>
