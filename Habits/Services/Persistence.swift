@@ -3,17 +3,24 @@ import SwiftData
 
 /// Container SwiftData condiviso dell'app.
 ///
-/// La sincronizzazione CloudKit si attiva automaticamente quando l'app è
-/// firmata con l'entitlement iCloud/CloudKit (vedi `Habits.entitlements` e il
-/// container `iCloud.com.danielemuscia.habits`). Senza iCloud loggato sul
-/// dispositivo, i dati restano comunque in locale: la sync riprende appena
-/// l'utente accede a iCloud.
+/// Prova ad attivare la sincronizzazione CloudKit (DB privato dell'utente,
+/// container `iCloud.com.danielemuscia.habits`); se non è disponibile — ad es.
+/// l'entitlement iCloud non è ancora provisioning-ato nel portale Apple — ripiega
+/// su uno store **solo locale**, così l'app parte comunque. Senza iCloud loggato
+/// i dati restano in locale e la sync riprende appena l'utente accede.
 enum AppModelContainer {
     static let shared: ModelContainer = {
         let schema = Schema([Habit.self, HabitEntry.self])
-        let configuration = ModelConfiguration(schema: schema)
+
+        let cloud = ModelConfiguration(schema: schema, cloudKitDatabase: .automatic)
+        if let container = try? ModelContainer(for: schema, configurations: [cloud]) {
+            return container
+        }
+
+        // Fallback: store locale senza sync.
+        let local = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
         do {
-            return try ModelContainer(for: schema, configurations: [configuration])
+            return try ModelContainer(for: schema, configurations: [local])
         } catch {
             fatalError("Impossibile creare il ModelContainer: \(error)")
         }
