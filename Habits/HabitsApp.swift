@@ -1,13 +1,12 @@
 import SwiftUI
+import HabitsKit
 
 @main
 struct HabitsApp: App {
-    @StateObject private var auth = AuthViewModel()
-
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environmentObject(auth)
+            MainTabView()
         }
+        .modelContainer(AppModelContainer.shared)
     }
 }

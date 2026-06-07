@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Tab bar principale dell'app.
 struct MainTabView: View {
-    let userId: UUID
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var habitsVM = HabitsViewModel()
 
     var body: some View {
@@ -18,9 +18,11 @@ struct MainTabView: View {
         }
         .tint(.accentColor)
         .environmentObject(habitsVM)
-        .task {
-            habitsVM.userId = userId
-            await habitsVM.load()
+        .task { habitsVM.reload() }
+        .onChange(of: scenePhase) { _, phase in
+            // Al ritorno in foreground rilegge lo store: riflette anche i log
+            // fatti dal widget mentre l'app era in background.
+            if phase == .active { habitsVM.reload() }
         }
     }
 }

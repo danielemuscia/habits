@@ -1,9 +1,9 @@
 import SwiftUI
+import HabitsKit
 
 /// Elenco di tutte le abitudini, con creazione/modifica/eliminazione.
 struct HabitListView: View {
     @EnvironmentObject private var vm: HabitsViewModel
-    @EnvironmentObject private var auth: AuthViewModel
 
     @State private var showingEditor = false
     @State private var editingHabit: Habit?
@@ -39,20 +39,6 @@ struct HabitListView: View {
                         Image(systemName: "plus")
                     }
                 }
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Button(role: .destructive) {
-                            Task {
-                                vm.reset()
-                                await auth.signOut()
-                            }
-                        } label: {
-                            Label("Esci", systemImage: "rectangle.portrait.and.arrow.right")
-                        }
-                    } label: {
-                        Image(systemName: "person.circle")
-                    }
-                }
             }
             .sheet(isPresented: $showingEditor) {
                 HabitEditorView()
@@ -64,9 +50,8 @@ struct HabitListView: View {
     }
 
     private func delete(at offsets: IndexSet) {
-        let toDelete = offsets.map { vm.habits[$0] }
-        Task {
-            for habit in toDelete { await vm.deleteHabit(habit) }
+        for habit in offsets.map({ vm.habits[$0] }) {
+            vm.deleteHabit(habit)
         }
     }
 }

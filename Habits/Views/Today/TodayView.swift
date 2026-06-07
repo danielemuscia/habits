@@ -1,4 +1,5 @@
 import SwiftUI
+import HabitsKit
 
 /// Vista giornaliera: elenco delle abitudini da spuntare per il giorno selezionato.
 struct TodayView: View {
@@ -7,9 +8,7 @@ struct TodayView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if vm.isLoading && vm.habits.isEmpty {
-                    ProgressView().controlSize(.large)
-                } else if vm.habits.isEmpty {
+                if vm.habits.isEmpty {
                     EmptyStateView(
                         icon: "sparkles",
                         title: "Nessuna abitudine",
@@ -43,7 +42,7 @@ struct TodayView: View {
             .padding(.horizontal)
             .padding(.bottom, 24)
         }
-        .refreshable { await vm.load() }
+        .refreshable { vm.reload() }
     }
 
     private var navTitle: String {
@@ -101,8 +100,8 @@ private struct HabitTodayRow: View {
             }
             .frame(width: 44, height: 44)
         } else {
-            CircularProgressView(
-                fraction: progress.fraction,
+            HabitRingView(
+                fraction: progress.ratio,
                 color: habit.swiftUIColor,
                 lineWidth: 6,
                 icon: habit.icon
@@ -121,39 +120,42 @@ private struct HabitTodayRow: View {
     private var restMenu: some View {
         if progress.isRest {
             Button {
-                Task { await vm.setRest(habit, false) }
+                vm.setRest(habit, false)
             } label: {
                 Label("Annulla riposo", systemImage: "arrow.uturn.backward")
             }
         } else {
             Button {
-                Task { await vm.setRest(habit, true) }
+                vm.setRest(habit, true)
             } label: {
                 Label("Segna giorno di riposo", systemImage: "moon.zzz.fill")
             }
         }
     }
 
-    /// Lo stepper +/- ha senso solo per più completamenti nello *stesso* giorno
-    /// (target giornaliero > 1). Negli altri casi si completa una volta al giorno con
-    /// un toggle: la spunta riflette "fatto **oggi**" (`todayCount`), mentre l'anello e
-    /// il testo a sinistra mostrano l'avanzamento del periodo. Si va oltre il target
-    /// completando più giorni/periodi (es. "6/5"), quindi il toggle non si disabilita.
+    /// Lo stepper +/- serve quando l'abitudine ammette più completamenti nello
+    /// *stesso* giorno (`habit.usesDailyCounter`): target giornaliero > 1, oppure
+    /// l'utente ha attivato "Più volte al giorno" anche con obiettivo settimanale/
+    /// mensile (es. 2 sessioni oggi verso "5 a settimana"). Negli altri casi si
+    /// completa una volta al giorno con un toggle: la spunta riflette "fatto
+    /// **oggi**" (`todayCount`), mentre l'anello e il testo a sinistra mostrano
+    /// l'avanzamento del periodo. Si va oltre il target completando più giorni/
+    /// periodi (es. "6/5"), quindi il toggle non si disabilita.
     @ViewBuilder
     private var actionControl: some View {
         if progress.isRest {
             Button {
-                Task { await vm.setRest(habit, false) }
+                vm.setRest(habit, false)
             } label: {
                 Image(systemName: "moon.zzz.fill")
                     .font(.system(size: 26))
                     .foregroundStyle(.indigo)
             }
             .buttonStyle(.plain)
-        } else if habit.period != .daily || habit.targetCount == 1 {
+        } else if !habit.usesDailyCounter {
             let doneToday = progress.todayCount > 0
             Button {
-                Task { await vm.toggle(habit) }
+                vm.toggle(habit)
             } label: {
                 Image(systemName: doneToday ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 28))
@@ -163,7 +165,7 @@ private struct HabitTodayRow: View {
         } else {
             HStack(spacing: 10) {
                 Button {
-                    Task { await vm.decrement(habit) }
+                    vm.decrement(habit)
                 } label: {
                     Image(systemName: "minus.circle.fill")
                         .font(.title2)
@@ -177,7 +179,7 @@ private struct HabitTodayRow: View {
                     .frame(minWidth: 22)
 
                 Button {
-                    Task { await vm.increment(habit) }
+                    vm.increment(habit)
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.title2)

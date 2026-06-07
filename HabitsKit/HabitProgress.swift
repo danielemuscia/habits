@@ -1,27 +1,40 @@
 import Foundation
 
 /// Avanzamento di un'abitudine nel periodo corrente.
-struct HabitProgress {
-    let habit: Habit
+public struct HabitProgress {
+    public let habit: Habit
     /// Conteggio totale nel periodo corrente (es. quante volte questa settimana).
-    let currentCount: Int
-    /// Conteggio registrato oggi (per il pulsante della vista Today).
-    let todayCount: Int
+    public let currentCount: Int
+    /// Conteggio registrato oggi (per il pulsante della vista Today / widget).
+    public let todayCount: Int
     /// Il giorno selezionato è marcato come "riposo".
-    var isRest: Bool = false
+    public var isRest: Bool
 
-    var target: Int { habit.targetCount }
-
-    /// Frazione di completamento [0, 1].
-    var fraction: Double {
-        guard target > 0 else { return 0 }
-        return min(1, Double(currentCount) / Double(target))
+    public init(habit: Habit, currentCount: Int, todayCount: Int, isRest: Bool = false) {
+        self.habit = habit
+        self.currentCount = currentCount
+        self.todayCount = todayCount
+        self.isRest = isRest
     }
 
-    var isComplete: Bool { currentCount >= target }
+    public var target: Int { habit.targetCount }
+
+    /// Rapporto completamento **non cappato** (può superare 1: overperformance).
+    /// Usato dall'anello per mostrare un secondo giro oltre l'obiettivo.
+    public var ratio: Double {
+        guard target > 0 else { return 0 }
+        return Double(currentCount) / Double(target)
+    }
+
+    /// Frazione di completamento [0, 1].
+    public var fraction: Double {
+        min(1, ratio)
+    }
+
+    public var isComplete: Bool { currentCount >= target }
 
     /// Calcola l'avanzamento dato l'elenco completo dei log dell'abitudine.
-    static func make(habit: Habit, entries: [HabitEntry], on day: Date, calendar: Calendar) -> HabitProgress {
+    public static func make(habit: Habit, entries: [HabitEntry], on day: Date, calendar: Calendar) -> HabitProgress {
         let interval = habit.period.dateInterval(containing: day, calendar: calendar)
         let startOfDay = calendar.startOfDay(for: day)
 

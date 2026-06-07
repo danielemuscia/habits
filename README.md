@@ -1,61 +1,60 @@
 # Habits 🌱
 
-App iOS minimale (stile Apple) per monitorare le abitudini, con backend in cloud su **Supabase**.
+App iOS minimale (stile Apple) per monitorare le abitudini. **Local-first**: i dati
+vivono sul dispositivo con **SwiftData** e si sincronizzano in automatico sul tuo
+**iCloud privato** via **CloudKit**. Nessun account da creare, nessun server.
 
 - **Oggi** — vista giornaliera con le abitudini da spuntare (toggle o conteggio +/−).
 - **Abitudini** — crea/modifica abitudini con frequenza target (N volte per giorno / settimana / mese / anno), icona e colore.
 - **Analytics** — trend, streak corrente, record e tasso di completamento per ogni abitudine.
-- **Account** — login/registrazione via email; ogni utente vede solo i propri dati (Row Level Security).
+- **Widget** — griglia "Dots" configurabile sulla Home: spunti le abitudini con un tap (App Intents interattivi, iOS 17+).
 
 ## Stack
 
 | Livello   | Tecnologia                          |
 |-----------|-------------------------------------|
 | Frontend  | SwiftUI (iOS 17+), Swift Charts     |
-| Backend   | Supabase (Postgres + Auth + REST)   |
-| SDK       | [supabase-swift](https://github.com/supabase/supabase-swift) 2.x |
+| Storage   | SwiftData (locale)                  |
+| Sync/Backup | CloudKit (DB privato iCloud dell'utente) |
 
-Architettura: **MVVM**. I `Service` parlano con Supabase, i `ViewModel` (`@MainActor`, `ObservableObject`) espongono lo stato alle `View`.
+Architettura: **MVVM**, local-first. I `ViewModel` (`@MainActor`, `ObservableObject`)
+leggono/scrivono sullo store SwiftData (`ModelContext`) ed espongono lo stato alle `View`.
+Nessuna dipendenza esterna: SwiftData e CloudKit sono framework di sistema.
+
+Tre target (XcodeGen): il framework **HabitsKit** (modelli + store, condivisi),
+l'**app** e l'**estensione widget**. App e widget leggono lo stesso store SwiftData
+tramite un **App Group**.
 
 ```
-Habits/
-├─ HabitsApp.swift          # entry point
-├─ Config/                  # configurazione Supabase + xcconfig
-├─ Models/                  # Habit, HabitEntry, HabitPeriod, HabitProgress
-├─ Services/                # SupabaseManager, AuthService, HabitService
-├─ ViewModels/              # Auth, Habits, Analytics
-├─ Views/                   # Root, Auth, Today, Habits, Analytics, Components
-├─ Theme/                   # colori, icone
-└─ Resources/               # Info.plist, Assets.xcassets
-supabase/migrations/        # schema SQL
+HabitsKit/                  # framework condiviso (Habit, HabitEntry, HabitPeriod,
+                            #   HabitProgress, Persistence, HabitStore, Color+Hex)
+Habits/                     # app
+├─ HabitsApp.swift          #   entry point + ModelContainer (CloudKit)
+├─ ViewModels/              #   Habits, Analytics
+├─ Views/                   #   Root, Today, Habits, Analytics, Components
+└─ Resources/               #   Info.plist, Assets.xcassets
+HabitsWidget/               # estensione: widget "Dots" + App Intents (log/config)
 project.yml                 # definizione progetto (XcodeGen)
 ```
 
 ## Setup
 
-### 1. Crea il progetto Supabase
+### 1. Abilita iCloud/CloudKit (una tantum, portale Apple)
 
-1. Vai su [supabase.com](https://supabase.com) e crea un nuovo progetto.
-2. Apri **SQL Editor** e incolla/esegui il contenuto di [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql). Crea le tabelle `habits` e `habit_entries` con le policy RLS.
-3. (Opzionale ma comodo in sviluppo) **Authentication → Providers → Email**: disattiva *Confirm email* così la registrazione logga subito l'utente senza passare dalla mail.
-4. Da **Project Settings → API** copia **Project URL** e **anon public key**.
+La sync è opzionale per *usare* l'app (senza iCloud i dati restano in locale), ma per
+backup e multi-device serve abilitarla:
 
-### 2. Configura i secret
+- **Apple Developer** ([developer.apple.com](https://developer.apple.com) → Certificates, Identifiers & Profiles): nell'App ID `com.danielemuscia.habits` abilita la capability **iCloud → CloudKit** e crea il container **`iCloud.com.danielemuscia.habits`**. In locale è già referenziato in `Habits/Habits.entitlements` (signing automatico col team `39ZSPD3CUW`).
 
-```bash
-cp Habits/Config/Secrets.example.xcconfig Habits/Config/Secrets.xcconfig
-```
+### 1b. App Group (per il widget)
 
-Apri `Secrets.xcconfig` e inserisci i tuoi valori (l'URL **senza** `https://`):
+App e widget condividono lo store via App Group. Nel portale crea il gruppo
+**`group.com.danielemuscia.habits`** e abilitalo su **entrambi** gli App ID
+(`com.danielemuscia.habits` e `com.danielemuscia.habits.widget`). Abilita la
+capability **iCloud → CloudKit** anche sull'App ID del widget (stesso container).
+In locale è già nei file entitlements dei due target.
 
-```
-SUPABASE_URL = your-project-ref.supabase.co
-SUPABASE_ANON_KEY = your-anon-public-key
-```
-
-> `Secrets.xcconfig` è in `.gitignore`: non verrà committato.
-
-### 3. Genera il progetto Xcode
+### 2. Genera il progetto Xcode
 
 Il progetto è definito in `project.yml` (XcodeGen) per restare leggero e riproducibile.
 
@@ -65,30 +64,32 @@ xcodegen generate       # crea Habits.xcodeproj
 open Habits.xcodeproj
 ```
 
-Xcode risolverà automaticamente la dipendenza Swift Package `supabase-swift`.
+Nessuna dipendenza Swift Package da risolvere.
 
-> Niente XcodeGen? Puoi creare manualmente un progetto App iOS, trascinare la cartella `Habits/`, aggiungere il package `https://github.com/supabase/supabase-swift`, impostare `Base.xcconfig` come configuration file e `Resources/Info.plist` come Info.plist del target.
+### 3. Esegui
 
-### 4. Esegui
-
-Seleziona un simulatore iOS 17+ e premi **Run**. Registra un account e inizia ad aggiungere abitudini.
+Seleziona un simulatore iOS 17+ e premi **Run**: l'app parte subito, senza login.
+Per verificare la **sincronizzazione CloudKit** serve un **dispositivo reale loggato
+su iCloud** (la sync sul simulatore è inaffidabile).
 
 ## Modello dati
 
-**habits**
-- `target_count` + `period` (`daily`/`weekly`/`monthly`/`yearly`) = obiettivo, es. *3 volte a settimana*.
-- `icon` (SF Symbol), `color` (hex), `archived`, `sort_order`.
+Due `@Model` SwiftData (compatibili CloudKit: campi con default, nessun vincolo di
+unicità — l'unicità per giorno è garantita in codice).
 
-**habit_entries**
-- Un record per `(habit_id, entry_date)` con `count` = quante volte fatta quel giorno.
+**Habit**
+- `targetCount` + `period` (`daily`/`weekly`/`monthly`/`yearly`) = obiettivo, es. *3 volte a settimana*.
+- `allowsMultiplePerDay` = se vera, l'abitudine si registra con un contatore +/− (più volte al giorno) anche con obiettivo settimanale/mensile; altrimenti è una spunta una volta al giorno.
+- `icon` (SF Symbol), `color` (hex), `details`, `archived`, `sortOrder`.
+
+**HabitEntry**
+- Un record per `(habitId, entryDate)` con `count` = quante volte fatta quel giorno; `skipped` = giorno di riposo.
 - L'avanzamento di periodo è la somma dei `count` nella finestra del periodo corrente.
 
-Entrambe le tabelle hanno RLS: ogni riga è filtrata per `user_id = auth.uid()`.
+Essendo nel database privato CloudKit, i dati sono per definizione visibili solo
+all'utente proprietario dell'iCloud.
 
 ## Roadmap (post-MVP)
 
 - Notifiche/reminder locali
-- Sync realtime (Supabase Realtime)
-- Widget e Live Activities
 - Reorder drag&drop e archiviazione abitudini
-- Accesso con Apple

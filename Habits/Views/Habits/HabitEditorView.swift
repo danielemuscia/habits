@@ -1,4 +1,5 @@
 import SwiftUI
+import HabitsKit
 
 /// Form per creare o modificare un'abitudine.
 struct HabitEditorView: View {
@@ -14,17 +15,26 @@ struct HabitEditorView: View {
     @State private var color: String
     @State private var targetCount: Int
     @State private var period: HabitPeriod
+    @State private var allowsMultiplePerDay: Bool
 
     private var isEditing: Bool { habit != nil }
+
+    /// Su periodo giornaliero il "quante volte" rappresenta già le volte *al
+    /// giorno*: l'opzione "Più volte al giorno" è ridondante e va mostrata solo
+    /// per periodi più ampi (settimana/mese/anno).
+    private var showsMultiplePerDayToggle: Bool {
+        period != .daily
+    }
 
     init(habit: Habit? = nil) {
         self.habit = habit
         _name = State(initialValue: habit?.name ?? "")
-        _description = State(initialValue: habit?.description ?? "")
+        _description = State(initialValue: habit?.details ?? "")
         _icon = State(initialValue: habit?.icon ?? HabitIcons.symbols.first!)
         _color = State(initialValue: habit?.color ?? HabitPalette.colors.first!)
         _targetCount = State(initialValue: habit?.targetCount ?? 1)
         _period = State(initialValue: habit?.period ?? .daily)
+        _allowsMultiplePerDay = State(initialValue: habit?.allowsMultiplePerDay ?? false)
     }
 
     private var selectedColor: Color { Color(hex: color) ?? .green }
@@ -51,12 +61,26 @@ struct HabitEditorView: View {
                             Text(p.displayName).tag(p)
                         }
                     }
+                    .onChange(of: period) { _, newValue in
+                        // Su giorno il flag non ha senso: lo azzeriamo per tenere
+                        // pulito il valore salvato.
+                        if newValue == .daily { allowsMultiplePerDay = false }
+                    }
                     HStack {
                         Image(systemName: "info.circle")
                         Text("Obiettivo: \(targetCount)× \(period.unitLabel)")
                             .font(.footnote)
                     }
                     .foregroundStyle(.secondary)
+
+                    if showsMultiplePerDayToggle {
+                        Toggle("Più volte al giorno", isOn: $allowsMultiplePerDay)
+                        Text(allowsMultiplePerDay
+                             ? "Puoi registrarla più volte nello stesso giorno (contatore +/-)."
+                             : "Si spunta una volta al giorno; l'obiettivo si raggiunge in più giorni.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Icona") {
@@ -71,10 +95,8 @@ struct HabitEditorView: View {
                     Section {
                         Button(role: .destructive) {
                             guard let habit else { return }
-                            Task {
-                                await vm.deleteHabit(habit)
-                                dismiss()
-                            }
+                            vm.deleteHabit(habit)
+                            dismiss()
                         } label: {
                             Label("Elimina abitudine", systemImage: "trash")
                         }
@@ -131,29 +153,18 @@ struct HabitEditorView: View {
     private func save() {
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         let trimmedDesc = description.trimmingCharacters(in: .whitespaces)
-        Task {
-            if let habit {
-                let update = HabitUpdate(
-                    name: trimmedName,
-                    description: trimmedDesc.isEmpty ? nil : trimmedDesc,
-                    icon: icon,
-                    color: color,
-                    targetCount: targetCount,
-                    period: period,
-                    archived: false
-                )
-                await vm.updateHabit(habit, with: update)
-            } else {
-                await vm.createHabit(
-                    name: trimmedName,
-                    description: trimmedDesc.isEmpty ? nil : trimmedDesc,
-                    icon: icon,
-                    color: color,
-                    targetCount: targetCount,
-                    period: period
-                )
-            }
-            dismiss()
+        let details = trimmedDesc.isEmpty ? nil : trimmedDesc
+        if let habit {
+            vm.updateHabit(
+                habit, name: trimmedName, details: details, icon: icon, color: color,
+                targetCount: targetCount, period: period, allowsMultiplePerDay: allowsMultiplePerDay
+            )
+        } else {
+            vm.createHabit(
+                name: trimmedName, details: details, icon: icon, color: color,
+                targetCount: targetCount, period: period, allowsMultiplePerDay: allowsMultiplePerDay
+            )
         }
+        dismiss()
     }
 }

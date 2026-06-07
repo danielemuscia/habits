@@ -1,17 +1,16 @@
 import Foundation
 
 /// Periodicità con cui un'abitudine va ripetuta.
-/// Allineata all'enum `habit_period` su Postgres/Supabase.
-enum HabitPeriod: String, Codable, CaseIterable, Identifiable, Sendable {
+public enum HabitPeriod: String, Codable, CaseIterable, Identifiable, Sendable {
     case daily
     case weekly
     case monthly
     case yearly
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
     /// Etichetta mostrata in UI (es. "al giorno").
-    var unitLabel: String {
+    public var unitLabel: String {
         switch self {
         case .daily:   return "al giorno"
         case .weekly:  return "a settimana"
@@ -21,7 +20,7 @@ enum HabitPeriod: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 
     /// Nome singolare del periodo.
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .daily:   return "Giorno"
         case .weekly:  return "Settimana"
@@ -31,7 +30,7 @@ enum HabitPeriod: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 
     /// Intervallo `[start, end)` del periodo che contiene `date`, secondo `calendar`.
-    func dateInterval(containing date: Date, calendar: Calendar) -> DateInterval {
+    public func dateInterval(containing date: Date, calendar: Calendar) -> DateInterval {
         let component: Calendar.Component
         switch self {
         case .daily:   component = .day

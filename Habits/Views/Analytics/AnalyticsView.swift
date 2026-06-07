@@ -1,4 +1,5 @@
 import SwiftUI
+import HabitsKit
 
 /// Sezione Analytics: heatmap di completamento, streak e percentuale per abitudine,
 /// sulla finestra temporale scelta dall'utente.
@@ -19,9 +20,7 @@ struct AnalyticsView: View {
                 .padding(.bottom, 8)
 
                 Group {
-                    if vm.isLoading && vm.stats.isEmpty {
-                        ProgressView().controlSize(.large)
-                    } else if habitsVM.habits.isEmpty {
+                    if habitsVM.habits.isEmpty {
                         EmptyStateView(
                             icon: "chart.bar",
                             title: "Niente da analizzare",
@@ -41,10 +40,9 @@ struct AnalyticsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .navigationTitle("Analytics")
-            .task(id: habitsVM.habits.map(\.id)) {
-                await vm.load(habits: habitsVM.habits)
+            .task(id: habitsVM.dataVersion) {
+                vm.load(habits: habitsVM.habits, entries: habitsVM.entries)
             }
-            .refreshable { await vm.load(habits: habitsVM.habits) }
         }
     }
 }
