@@ -44,16 +44,19 @@ public struct HabitRingView: View {
                     .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))
 
-                // Secondo giro (overperformance): stesso colore, sollevato sopra
-                // il primo con ombra direzionale → effetto a strati di Apple.
+                // Secondo giro (overperformance): stesso colore ma più scuro,
+                // sopra l'anello pieno → si distingue chiaramente quanto si è
+                // andati oltre l'obiettivo.
                 if overflow > 0 {
+                    let cap = StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                     Circle()
                         .trim(from: 0, to: overflow)
-                        .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                        .stroke(color, style: cap)
                         .rotationEffect(.degrees(-90))
-                        .shadow(color: .black.opacity(0.35),
-                                radius: lineWidth * 0.35,
-                                x: 0, y: lineWidth * 0.28)
+                    Circle()
+                        .trim(from: 0, to: overflow)
+                        .stroke(.black.opacity(0.3), style: cap)
+                        .rotationEffect(.degrees(-90))
                 }
 
                 if let icon {
