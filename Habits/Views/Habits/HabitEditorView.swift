@@ -18,10 +18,11 @@ struct HabitEditorView: View {
 
     private var isEditing: Bool { habit != nil }
 
-    /// Un obiettivo giornaliero > 1 implica già più completamenti al giorno
-    /// (contatore), quindi l'opzione esplicita sarebbe ridondante: la nascondiamo.
-    private var multiplePerDayIsImplicit: Bool {
-        period == .daily && targetCount > 1
+    /// Su periodo giornaliero il "quante volte" rappresenta già le volte *al
+    /// giorno*: l'opzione "Più volte al giorno" è ridondante e va mostrata solo
+    /// per periodi più ampi (settimana/mese/anno).
+    private var showsMultiplePerDayToggle: Bool {
+        period != .daily
     }
 
     init(habit: Habit? = nil) {
@@ -59,6 +60,11 @@ struct HabitEditorView: View {
                             Text(p.displayName).tag(p)
                         }
                     }
+                    .onChange(of: period) { _, newValue in
+                        // Su giorno il flag non ha senso: lo azzeriamo per tenere
+                        // pulito il valore salvato.
+                        if newValue == .daily { allowsMultiplePerDay = false }
+                    }
                     HStack {
                         Image(systemName: "info.circle")
                         Text("Obiettivo: \(targetCount)× \(period.unitLabel)")
@@ -66,7 +72,7 @@ struct HabitEditorView: View {
                     }
                     .foregroundStyle(.secondary)
 
-                    if !multiplePerDayIsImplicit {
+                    if showsMultiplePerDayToggle {
                         Toggle("Più volte al giorno", isOn: $allowsMultiplePerDay)
                         Text(allowsMultiplePerDay
                              ? "Puoi registrarla più volte nello stesso giorno (contatore +/-)."
