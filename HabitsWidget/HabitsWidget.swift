@@ -9,8 +9,8 @@ struct HabitDot: Identifiable, Hashable {
     let name: String
     let icon: String
     let colorHex: String
-    let fraction: Double
-    let isComplete: Bool
+    /// Rapporto non cappato (può superare 1: overperformance → secondo giro).
+    let ratio: Double
     let isRest: Bool
     let todayCount: Int
 }
@@ -23,8 +23,8 @@ struct HabitsTimelineEntry: TimelineEntry {
         date: .now,
         dots: (0..<4).map {
             HabitDot(id: UUID(), name: "Abitudine", icon: HabitIcons.symbols[$0],
-                     colorHex: HabitPalette.colors[$0], fraction: Double($0) / 3,
-                     isComplete: $0 == 0, isRest: false, todayCount: $0)
+                     colorHex: HabitPalette.colors[$0], ratio: Double($0) / 2,
+                     isRest: false, todayCount: $0)
         }
     )
 }
@@ -62,7 +62,7 @@ struct Provider: AppIntentTimelineProvider {
             let p = HabitProgress.make(habit: habit, entries: entries, on: Date(), calendar: cal)
             return HabitDot(
                 id: habit.id, name: habit.name, icon: habit.icon, colorHex: habit.color,
-                fraction: p.fraction, isComplete: p.isComplete, isRest: p.isRest, todayCount: p.todayCount
+                ratio: p.ratio, isRest: p.isRest, todayCount: p.todayCount
             )
         }
         return HabitsTimelineEntry(date: Date(), dots: dots)

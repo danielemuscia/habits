@@ -102,35 +102,29 @@ struct HabitDotButton: View {
 
     var body: some View {
         Button(intent: LogHabitIntent(habitId: dot.id)) {
-            ZStack {
+            Group {
                 if dot.isRest {
-                    Circle().fill(Color(.systemGray5))
-                    Image(systemName: "moon.zzz.fill")
-                        .font(.system(size: size * 0.38))
-                        .foregroundStyle(.secondary)
-                } else if dot.isComplete {
-                    Circle().fill(color)
-                    icon.foregroundStyle(.white)
-                } else {
-                    Circle().stroke(Color(.systemGray3), lineWidth: max(2, size * 0.05))
-                    if dot.fraction > 0 {
-                        Circle()
-                            .trim(from: 0, to: dot.fraction)
-                            .stroke(color, style: StrokeStyle(lineWidth: max(2, size * 0.07), lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                            .padding(max(1, size * 0.025))
+                    ZStack {
+                        Circle().fill(Color(.systemGray5))
+                        Image(systemName: "moon.zzz.fill")
+                            .font(.system(size: size * 0.34))
+                            .foregroundStyle(.secondary)
                     }
-                    icon.foregroundStyle(color)
+                } else {
+                    // Stesso anello dell'app: niente disco pieno; l'overperformance
+                    // continua con un secondo giro (animazioni off nel widget).
+                    HabitRingView(
+                        fraction: dot.ratio,
+                        color: color,
+                        lineWidth: max(2.5, size * 0.09),
+                        icon: dot.icon,
+                        animated: false
+                    )
                 }
             }
             .frame(width: size, height: size)
         }
         .buttonStyle(.plain)
-    }
-
-    private var icon: some View {
-        Image(systemName: dot.icon)
-            .font(.system(size: size * 0.4, weight: .semibold))
     }
 }
 

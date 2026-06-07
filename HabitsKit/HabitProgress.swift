@@ -19,10 +19,16 @@ public struct HabitProgress {
 
     public var target: Int { habit.targetCount }
 
+    /// Rapporto completamento **non cappato** (può superare 1: overperformance).
+    /// Usato dall'anello per mostrare un secondo giro oltre l'obiettivo.
+    public var ratio: Double {
+        guard target > 0 else { return 0 }
+        return Double(currentCount) / Double(target)
+    }
+
     /// Frazione di completamento [0, 1].
     public var fraction: Double {
-        guard target > 0 else { return 0 }
-        return min(1, Double(currentCount) / Double(target))
+        min(1, ratio)
     }
 
     public var isComplete: Bool { currentCount >= target }

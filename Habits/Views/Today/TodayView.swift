@@ -100,8 +100,8 @@ private struct HabitTodayRow: View {
             }
             .frame(width: 44, height: 44)
         } else {
-            CircularProgressView(
-                fraction: progress.fraction,
+            HabitRingView(
+                fraction: progress.ratio,
                 color: habit.swiftUIColor,
                 lineWidth: 6,
                 icon: habit.icon
