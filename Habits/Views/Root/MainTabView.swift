@@ -1,10 +1,8 @@
 import SwiftUI
-import SwiftData
-import HabitsKit
 
 /// Tab bar principale dell'app.
 struct MainTabView: View {
-    @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var habitsVM = HabitsViewModel()
 
     var body: some View {
@@ -20,6 +18,11 @@ struct MainTabView: View {
         }
         .tint(.accentColor)
         .environmentObject(habitsVM)
-        .task { habitsVM.configure(context) }
+        .task { habitsVM.reload() }
+        .onChange(of: scenePhase) { _, phase in
+            // Al ritorno in foreground rilegge lo store: riflette anche i log
+            // fatti dal widget mentre l'app era in background.
+            if phase == .active { habitsVM.reload() }
+        }
     }
 }

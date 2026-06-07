@@ -14,21 +14,19 @@ final class HabitsViewModel: ObservableObject {
     /// Cambia a ogni modifica dei dati: usato altrove (es. Analytics) per ricalcolare.
     @Published var dataVersion = 0
 
-    private var context: ModelContext?
     private var calendar: Calendar = {
         var c = Calendar.current
         c.firstWeekday = 2 // lunedì
         return c
     }()
 
-    var isToday: Bool { calendar.isDateInToday(selectedDate) }
+    /// Contesto di lettura corrente. Viene **ricreato a ogni `reload()`** così da
+    /// vedere anche le scritture fatte da altri processi (il widget condivide lo
+    /// store via App Group). È trattenuto perché possiede gli oggetti pubblicati
+    /// in `habits`/`entries`, che le viste mutano direttamente.
+    private var context: ModelContext?
 
-    /// Collega lo store e carica i dati. Va chiamato una volta dal `MainTabView`.
-    func configure(_ context: ModelContext) {
-        guard self.context == nil else { return }
-        self.context = context
-        reload()
-    }
+    var isToday: Bool { calendar.isDateInToday(selectedDate) }
 
     func goToToday() {
         selectedDate = Date()
@@ -38,7 +36,8 @@ final class HabitsViewModel: ObservableObject {
     // MARK: - Loading
 
     func reload() {
-        guard let context else { return }
+        let context = ModelContext(AppModelContainer.shared)
+        self.context = context
         let habitsDescriptor = FetchDescriptor<Habit>(
             predicate: #Predicate { $0.archived == false },
             sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.createdAt)]
@@ -87,8 +86,8 @@ final class HabitsViewModel: ObservableObject {
         upsertEntry(habit, count: max(0, count), skipped: false)
     }
 
-    /// Crea o aggiorna l'entry del giorno selezionato per l'abitudine (unicità
-    /// per `(habitId, entryDate)` garantita qui, non dal DB).
+    /// Crea o aggiorna l'entry del giorno selezionato (unicità per `(habitId,
+    /// entryDate)` garantita qui, non dal DB).
     private func upsertEntry(_ habit: Habit, count: Int, skipped: Bool) {
         guard let context else { return }
         let day = calendar.startOfDay(for: selectedDate)
