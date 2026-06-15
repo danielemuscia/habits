@@ -2,7 +2,7 @@ import SwiftUI
 import HabitsKit
 
 /// Sezione Analytics: heatmap di completamento, streak e percentuale per abitudine,
-/// sulla finestra temporale scelta dall'utente.
+/// sulla finestra temporale scelta dall'utente (periodo di calendario fisso).
 struct AnalyticsView: View {
     @EnvironmentObject private var habitsVM: HabitsViewModel
     @StateObject private var vm = AnalyticsViewModel()
@@ -17,7 +17,45 @@ struct AnalyticsView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
+                .padding(.top, 4)
                 .padding(.bottom, 8)
+
+                // Navigazione tra periodi
+                HStack(spacing: 12) {
+                    Button {
+                        vm.goToPreviousPeriod()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.primary)
+
+                    Spacer()
+
+                    Text(vm.periodLabel)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    Spacer()
+
+                    Button {
+                        vm.goToNextPeriod()
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(vm.canGoNext ? .primary : Color(.systemGray3))
+                    .disabled(!vm.canGoNext)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 10)
 
                 Group {
                     if habitsVM.habits.isEmpty {
@@ -73,8 +111,8 @@ private struct HabitStatsCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 16) {
-                Label("serie di \(stat.currentStreak)", systemImage: "flame.fill")
-                Label("record \(stat.bestStreak)", systemImage: "trophy.fill")
+                Label("serie \(stat.currentStreak) \(stat.streakUnit)", systemImage: "flame.fill")
+                Label("record \(stat.bestStreak) \(stat.streakUnit)", systemImage: "trophy.fill")
                 if stat.hasRest {
                     Spacer()
                     Label("riposo", systemImage: "moon.fill")
@@ -171,6 +209,12 @@ private struct HeatmapView: View {
                             Image(systemName: "moon.fill")
                                 .font(.system(size: cellSize * 0.5))
                                 .foregroundStyle(.white.opacity(0.95))
+                        }
+                    }
+                    .overlay {
+                        if cell.isToday {
+                            RoundedRectangle(cornerRadius: cellSize * 0.24)
+                                .strokeBorder(.primary.opacity(0.55), lineWidth: 1.5)
                         }
                     }
             }
