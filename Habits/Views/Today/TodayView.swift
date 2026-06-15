@@ -30,18 +30,22 @@ struct TodayView: View {
     }
 
     private var content: some View {
-        ScrollView {
+        // List (non LazyVStack) per avere lo swipe-to-rest nativo sulle righe.
+        List {
             DateStripView(selected: $vm.selectedDate, scrollToTodayToken: vm.scrollToTodayToken)
                 .padding(.vertical, 8)
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
 
-            LazyVStack(spacing: 12) {
-                ForEach(vm.progresses, id: \.habit.id) { progress in
-                    HabitTodayRow(progress: progress)
-                }
+            ForEach(vm.progresses, id: \.habit.id) { progress in
+                HabitTodayRow(progress: progress)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
         }
+        .listStyle(.plain)
         .refreshable { vm.reload() }
     }
 
@@ -71,7 +75,7 @@ private struct HabitTodayRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(habit.name)
                     .font(.headline)
-                Text(progress.isRest ? "Giorno di riposo" : targetText)
+                Text(progress.isRest ? restStatusText : targetText)
                     .font(.caption)
                     .foregroundStyle(progress.isRest ? Color.indigo : .secondary)
             }
@@ -87,6 +91,15 @@ private struct HabitTodayRow: View {
                 .stroke(progress.isComplete ? habit.swiftUIColor.opacity(0.4) : .clear, lineWidth: 1.5)
         )
         .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
+        // Swipe (azione primaria, scopribile) + long-press (scorciatoia bonus).
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button {
+                vm.setRest(habit, !progress.isRest)
+            } label: {
+                Label(restActionLabel, systemImage: progress.isRest ? "arrow.uturn.backward" : "moon.zzz.fill")
+            }
+            .tint(progress.isRest ? .gray : .indigo)
+        }
         .contextMenu { restMenu }
     }
 
@@ -115,7 +128,7 @@ private struct HabitTodayRow: View {
         }
     }
 
-    /// Menu contestuale (long-press) per marcare/smarcare il giorno di riposo.
+    /// Menu contestuale (long-press) per marcare/smarcare il riposo.
     @ViewBuilder
     private var restMenu: some View {
         if progress.isRest {
@@ -128,8 +141,42 @@ private struct HabitTodayRow: View {
             Button {
                 vm.setRest(habit, true)
             } label: {
-                Label("Segna giorno di riposo", systemImage: "moon.zzz.fill")
+                Label(restMenuLabel, systemImage: "moon.zzz.fill")
             }
+        }
+    }
+
+    // MARK: - Label adattive al periodo dell'abitudine
+    // Per habit non-daily il "riposo" salta l'intero periodo (settimana/mese/anno).
+
+    /// Testo breve per lo swipe / azione.
+    private var restActionLabel: String {
+        if progress.isRest { return "Annulla" }
+        switch habit.period {
+        case .daily:   return "Riposo"
+        case .weekly:  return "Salta sett."
+        case .monthly: return "Salta mese"
+        case .yearly:  return "Salta anno"
+        }
+    }
+
+    /// Testo esteso per il menu long-press.
+    private var restMenuLabel: String {
+        switch habit.period {
+        case .daily:   return "Segna giorno di riposo"
+        case .weekly:  return "Salta questa settimana"
+        case .monthly: return "Salta questo mese"
+        case .yearly:  return "Salta quest'anno"
+        }
+    }
+
+    /// Testo di stato mostrato sotto il nome quando è attivo il riposo.
+    private var restStatusText: String {
+        switch habit.period {
+        case .daily:   return "Giorno di riposo"
+        case .weekly:  return "Settimana di riposo"
+        case .monthly: return "Mese di riposo"
+        case .yearly:  return "Anno di riposo"
         }
     }
 
