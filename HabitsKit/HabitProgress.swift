@@ -46,10 +46,14 @@ public struct HabitProgress {
             // al periodo successivo, non a questo (evita di sommare il giorno dopo).
             if entry.entryDate >= interval.start && entry.entryDate < interval.end {
                 periodCount += entry.count
+                // Per habit non-daily il riposo è a livello di periodo intero:
+                // basta un'entry skipped nel periodo per marcare tutto come riposo.
+                if entry.skipped && habit.period != .daily { isRest = true }
             }
             if calendar.isDate(entry.entryDate, inSameDayAs: startOfDay) {
                 todayCount += entry.count
-                if entry.skipped { isRest = true }
+                // Per habit daily il riposo è a livello di giorno.
+                if entry.skipped && habit.period == .daily { isRest = true }
             }
         }
         return HabitProgress(habit: habit, currentCount: periodCount, todayCount: todayCount, isRest: isRest)

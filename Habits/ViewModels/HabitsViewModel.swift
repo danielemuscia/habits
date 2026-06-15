@@ -77,9 +77,37 @@ final class HabitsViewModel: ObservableObject {
         setCount(habit, to: current > 0 ? 0 : 1)
     }
 
-    /// Marca/smarca il giorno selezionato come "riposo".
+    /// Marca/smarca come "riposo".
+    /// - Habit daily: riposo sul giorno selezionato.
+    /// - Habit non-daily (frequenza flessibile): riposo sull'intero periodo corrente.
+    ///   Il marker viene scritto all'inizio del periodo (es. lunedì per una settimana);
+    ///   rimuoverlo cancella il flag su tutte le entry del periodo.
     func setRest(_ habit: Habit, _ rest: Bool) {
-        upsertEntry(habit, count: 0, skipped: rest)
+        guard habit.period != .daily else {
+            upsertEntry(habit, count: 0, skipped: rest)
+            return
+        }
+        guard let context else { return }
+        let periodInterval = habit.period.dateInterval(containing: selectedDate, calendar: calendar)
+        if rest {
+            let periodStart = periodInterval.start
+            if let existing = entries.first(where: {
+                $0.habitId == habit.id && calendar.isDate($0.entryDate, inSameDayAs: periodStart)
+            }) {
+                existing.skipped = true
+                existing.count = 0
+            } else {
+                context.insert(HabitEntry(habitId: habit.id, entryDate: periodStart, count: 0, skipped: true))
+            }
+        } else {
+            for entry in entries where entry.habitId == habit.id
+                && entry.entryDate >= periodInterval.start
+                && entry.entryDate < periodInterval.end
+                && entry.skipped {
+                entry.skipped = false
+            }
+        }
+        save()
     }
 
     private func setCount(_ habit: Habit, to count: Int) {

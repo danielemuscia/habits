@@ -256,11 +256,26 @@ final class AnalyticsViewModel: ObservableObject {
                 .filter { inCell($0.entryDate) }
                 .reduce(0) { $0 + $1.count }
 
-            // Quanti giorni di questa cella sono di riposo: scontano l'obiettivo atteso.
+            // Calcola isRest in base al modello dell'abitudine:
+            // - daily: la cella è rest solo se tutti i suoi giorni sono rest.
+            // - non-daily (frequenza flessibile): la cella è rest se il periodo
+            //   dell'abitudine che la contiene ha almeno un marker di riposo.
             let totalDays = max(1, Int((interval.duration / 86_400).rounded()))
             let restInCell = restDays.filter(inCell).count
-            let isRest = !isFuture && restInCell >= totalDays
-            let activeFactor = Double(totalDays - restInCell) / Double(totalDays)
+            let isRest: Bool
+            let activeFactor: Double
+            if habit.period == .daily {
+                isRest = !isFuture && restInCell >= totalDays
+                activeFactor = Double(totalDays - restInCell) / Double(totalDays)
+            } else {
+                let hComp = calendarComponent(for: habit.period)
+                let hInterval = calendar.dateInterval(of: hComp, for: interval.start)
+                let restInHabitPeriod = hInterval.map { hi in
+                    restDays.filter { $0 >= hi.start && $0 < hi.end }.count
+                } ?? 0
+                isRest = !isFuture && restInHabitPeriod > 0
+                activeFactor = 1.0
+            }
             let effectiveTarget = isRest ? 0 : max(1, Int((Double(cellTarget) * activeFactor).rounded()))
 
             // True se la cella include il giorno corrente.
@@ -286,14 +301,26 @@ final class AnalyticsViewModel: ObservableObject {
 
         // Current streak: all-time, a ritroso da oggi.
         var currentStreak = 0
+        // Per habit non-daily (frequenza flessibile): qualsiasi marker di riposo nel
+        // periodo = intero periodo neutro (trasparente alla streak). Per daily: solo
+        // se tutti i giorni del periodo sono rest (comportamento invariato).
+        func isPeriodRest(restInS: Int, totalInS: Int) -> Bool {
+            habit.period == .daily ? restInS >= totalInS : restInS > 0
+        }
+        func periodEffTarget(restInS: Int, totalInS: Int) -> Int {
+            habit.period == .daily
+                ? max(1, Int((Double(sTarget) * Double(totalInS - restInS) / Double(totalInS)).rounded()))
+                : sTarget
+        }
+
         var cursor = calendar.startOfDay(for: Date())
         for _ in 0..<5000 {
             guard let si = calendar.dateInterval(of: sComp, for: cursor) else { break }
             let restInS = restDays.filter { $0 >= si.start && $0 < si.end }.count
             let totalInS = max(1, Int((si.duration / 86_400).rounded()))
-            if restInS < totalInS {
+            if !isPeriodRest(restInS: restInS, totalInS: totalInS) {
                 let cnt = entries.filter { $0.entryDate >= si.start && $0.entryDate < si.end }.reduce(0) { $0 + $1.count }
-                let effT = max(1, Int((Double(sTarget) * Double(totalInS - restInS) / Double(totalInS)).rounded()))
+                let effT = periodEffTarget(restInS: restInS, totalInS: totalInS)
                 if cnt >= effT {
                     currentStreak += 1
                 } else if si.start != currentPeriodStart {
@@ -314,9 +341,9 @@ final class AnalyticsViewModel: ObservableObject {
                 guard let si = calendar.dateInterval(of: sComp, for: bCursor) else { break }
                 let restInS = restDays.filter { $0 >= si.start && $0 < si.end }.count
                 let totalInS = max(1, Int((si.duration / 86_400).rounded()))
-                if restInS < totalInS {
+                if !isPeriodRest(restInS: restInS, totalInS: totalInS) {
                     let cnt = entries.filter { $0.entryDate >= si.start && $0.entryDate < si.end }.reduce(0) { $0 + $1.count }
-                    let effT = max(1, Int((Double(sTarget) * Double(totalInS - restInS) / Double(totalInS)).rounded()))
+                    let effT = periodEffTarget(restInS: restInS, totalInS: totalInS)
                     if cnt >= effT {
                         bRunning += 1
                         bestStreak = max(bestStreak, bRunning)
