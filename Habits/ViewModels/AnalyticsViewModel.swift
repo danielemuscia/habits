@@ -166,14 +166,14 @@ final class AnalyticsViewModel: ObservableObject {
             let end = interval.end.addingTimeInterval(-1)
             return formatWeekRange(from: start, to: end)
         case .month:
-            return monthYearFormatter.string(from: referenceDate)
+            return Self.monthYearFormatter.string(from: referenceDate)
         case .quarter:
             let month = calendar.component(.month, from: referenceDate)
             let q = (month - 1) / 3 + 1
             let year = calendar.component(.year, from: referenceDate)
             return "Q\(q) \(year)"
         case .year:
-            return yearFormatter.string(from: referenceDate)
+            return Self.yearFormatter.string(from: referenceDate)
         }
     }
 
