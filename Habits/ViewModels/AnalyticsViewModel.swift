@@ -224,18 +224,20 @@ final class AnalyticsViewModel: ObservableObject {
     private func computeStats(for habit: Habit, entries: [HabitEntry], reference: Date) -> HabitStats {
         let component = range.cellComponent
         let windowStart = range.start(from: reference, calendar: calendar)
-        // Per periodi già conclusi, end = fine del periodo; per il periodo corrente, end = ora.
         let periodEnd = range.end(from: reference, calendar: calendar)
-        let windowEnd = min(periodEnd, Date())
+        // Il loop parte dall'ultimo istante del periodo (non da "oggi") così mostriamo
+        // sempre tutte le celle del periodo, incluse quelle future (count = 0).
+        let loopAnchor = periodEnd.addingTimeInterval(-1)
         let cellTarget = self.cellTarget(for: habit, component: component)
         let today = calendar.startOfDay(for: Date())
+        let now = Date()
 
         // Giorni marcati come riposo (inizio giornata), per scontare le aspettative.
         let restDays = Set(entries.filter(\.skipped).map { calendar.startOfDay(for: $0.entryDate) })
 
         var cells: [HeatCell] = []
         for offset in 0..<500 {
-            guard let ref = calendar.date(byAdding: component, value: -offset, to: windowEnd) else { break }
+            guard let ref = calendar.date(byAdding: component, value: -offset, to: loopAnchor) else { break }
             let interval = calendar.dateInterval(of: component, for: ref)
                 ?? DateInterval(start: calendar.startOfDay(for: ref), duration: 86_400)
             // Manteniamo sempre la cella corrente (offset 0); fermiamo quando la cella
@@ -246,14 +248,16 @@ final class AnalyticsViewModel: ObservableObject {
             // alla cella successiva, non a questa (evita doppi conteggi sul confine).
             func inCell(_ date: Date) -> Bool { date >= interval.start && date < interval.end }
 
-            let count = entries
+            // Le celle future (ancora non arrivate) hanno sempre count = 0.
+            let isFuture = interval.start > now
+            let count = isFuture ? 0 : entries
                 .filter { inCell($0.entryDate) }
                 .reduce(0) { $0 + $1.count }
 
             // Quanti giorni di questa cella sono di riposo: scontano l'obiettivo atteso.
             let totalDays = max(1, Int((interval.duration / 86_400).rounded()))
             let restInCell = restDays.filter(inCell).count
-            let isRest = restInCell >= totalDays
+            let isRest = !isFuture && restInCell >= totalDays
             let activeFactor = Double(totalDays - restInCell) / Double(totalDays)
             let effectiveTarget = isRest ? 0 : max(1, Int((Double(cellTarget) * activeFactor).rounded()))
 
@@ -265,7 +269,7 @@ final class AnalyticsViewModel: ObservableObject {
                 label: cellLabel(for: interval.start, component: component),
                 count: count,
                 fraction: effectiveTarget > 0 ? Double(count) / Double(effectiveTarget) : 0,
-                isComplete: !isRest && count >= effectiveTarget,
+                isComplete: !isRest && !isFuture && count >= effectiveTarget,
                 isRest: isRest,
                 isToday: isToday
             ))
