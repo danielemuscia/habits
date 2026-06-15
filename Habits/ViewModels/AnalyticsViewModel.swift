@@ -2,7 +2,8 @@ import Foundation
 import HabitsKit
 
 /// Finestra temporale scelta dall'utente per gli Analytics.
-/// Determina quanto indietro guardare e la granularità delle celle della heatmap.
+/// Ogni case corrisponde a un periodo di calendario fisso (non scorrevole):
+/// .week = lunedì–domenica correnti, .month = 1°–ultimo del mese, ecc.
 enum AnalyticsRange: String, CaseIterable, Identifiable {
     case week, month, quarter, year
 
@@ -17,12 +18,21 @@ enum AnalyticsRange: String, CaseIterable, Identifiable {
         }
     }
 
-    var subtitle: String {
+    /// Componente calendario usato per spostarsi al periodo precedente/successivo.
+    var navigationComponent: Calendar.Component {
         switch self {
-        case .week:    return "Ultima settimana · per giorno"
-        case .month:   return "Ultimo mese · per giorno"
-        case .quarter: return "Ultimo trimestre · per settimana"
-        case .year:    return "Ultimo anno · per mese"
+        case .week:    return .weekOfYear
+        case .month:   return .month
+        case .quarter: return .month   // si sposta di 3 mesi (vedi goToPreviousPeriod)
+        case .year:    return .year
+        }
+    }
+
+    /// Numero di unità del navigationComponent da aggiungere per avanzare di 1 periodo.
+    var navigationStep: Int {
+        switch self {
+        case .quarter: return 3
+        default:       return 1
         }
     }
 
@@ -36,13 +46,37 @@ enum AnalyticsRange: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Inizio (incluso) della finestra rispetto a `end`.
-    func start(from end: Date, calendar: Calendar) -> Date {
+    /// Inizio (incluso) del periodo fisso che contiene `reference`.
+    func start(from reference: Date, calendar: Calendar) -> Date {
         switch self {
-        case .week:    return calendar.date(byAdding: .day, value: -7, to: end) ?? end
-        case .month:   return calendar.date(byAdding: .month, value: -1, to: end) ?? end
-        case .quarter: return calendar.date(byAdding: .month, value: -3, to: end) ?? end
-        case .year:    return calendar.date(byAdding: .year, value: -1, to: end) ?? end
+        case .week:
+            return calendar.dateInterval(of: .weekOfYear, for: reference)?.start ?? reference
+        case .month:
+            return calendar.dateInterval(of: .month, for: reference)?.start ?? reference
+        case .quarter:
+            let month = calendar.component(.month, from: reference)
+            let qStartMonth = ((month - 1) / 3) * 3 + 1
+            var comps = calendar.dateComponents([.year], from: reference)
+            comps.month = qStartMonth
+            comps.day = 1
+            return calendar.date(from: comps) ?? reference
+        case .year:
+            return calendar.dateInterval(of: .year, for: reference)?.start ?? reference
+        }
+    }
+
+    /// Fine (esclusa) del periodo fisso che contiene `reference`.
+    func end(from reference: Date, calendar: Calendar) -> Date {
+        switch self {
+        case .week:
+            return calendar.dateInterval(of: .weekOfYear, for: reference)?.end ?? reference
+        case .month:
+            return calendar.dateInterval(of: .month, for: reference)?.end ?? reference
+        case .quarter:
+            let periodStart = start(from: reference, calendar: calendar)
+            return calendar.date(byAdding: .month, value: 3, to: periodStart) ?? reference
+        case .year:
+            return calendar.dateInterval(of: .year, for: reference)?.end ?? reference
         }
     }
 }
@@ -60,13 +94,15 @@ struct HeatCell: Identifiable {
     let isComplete: Bool
     /// Periodo di riposo: stato neutro (non rompe la streak, escluso dal completamento).
     let isRest: Bool
+    /// True se la cella contiene il giorno corrente (oggi).
+    let isToday: Bool
 }
 
 /// Statistiche aggregate per una singola abitudine, riferite alla finestra scelta.
 struct HabitStats: Identifiable {
     let id: UUID
     let habit: Habit
-    /// Periodi (celle) completati consecutivi fino all'ultimo (streak).
+    /// Serie consecutiva all-time (non limitata alla finestra).
     let currentStreak: Int
     /// Streak massima nella finestra.
     let bestStreak: Int
@@ -84,7 +120,7 @@ struct HabitStats: Identifiable {
     let showCellLabels: Bool
     /// Almeno una cella è un giorno di riposo (per mostrare la legenda).
     let hasRest: Bool
-    /// Descrizione della finestra mostrata.
+    /// Descrizione del periodo mostrato (es. "9 – 15 giu 2026").
     let subtitle: String
 }
 
@@ -96,6 +132,8 @@ final class AnalyticsViewModel: ObservableObject {
     @Published var range: AnalyticsRange = .week {
         didSet { rebuild() }
     }
+    /// Data di riferimento per il periodo visualizzato (di default oggi).
+    @Published private(set) var referenceDate: Date = Date()
 
     private var calendar: Calendar = {
         var c = Calendar.current
@@ -107,6 +145,63 @@ final class AnalyticsViewModel: ObservableObject {
     private var loadedHabits: [Habit] = []
     private var loadedEntries: [HabitEntry] = []
 
+    // MARK: - Navigation
+
+    /// True se il periodo visualizzato è già quello corrente (non si può avanzare).
+    var canGoNext: Bool {
+        let periodStart = range.start(from: Date(), calendar: calendar)
+        let refStart = range.start(from: referenceDate, calendar: calendar)
+        return refStart < periodStart
+    }
+
+    /// Etichetta leggibile del periodo corrente (es. "9 – 15 giu 2026", "Giugno 2026").
+    var periodLabel: String {
+        switch range {
+        case .week:
+            guard let interval = calendar.dateInterval(of: .weekOfYear, for: referenceDate) else {
+                return range.label
+            }
+            let start = interval.start
+            // fine = mezzanotte del lunedì successivo → sottraiamo 1 secondo per avere domenica
+            let end = interval.end.addingTimeInterval(-1)
+            return formatWeekRange(from: start, to: end)
+        case .month:
+            return monthYearFormatter.string(from: referenceDate)
+        case .quarter:
+            let month = calendar.component(.month, from: referenceDate)
+            let q = (month - 1) / 3 + 1
+            let year = calendar.component(.year, from: referenceDate)
+            return "Q\(q) \(year)"
+        case .year:
+            return yearFormatter.string(from: referenceDate)
+        }
+    }
+
+    func goToPreviousPeriod() {
+        referenceDate = calendar.date(
+            byAdding: range.navigationComponent,
+            value: -range.navigationStep,
+            to: referenceDate
+        ) ?? referenceDate
+        rebuild()
+    }
+
+    func goToNextPeriod() {
+        guard canGoNext else { return }
+        let candidate = calendar.date(
+            byAdding: range.navigationComponent,
+            value: range.navigationStep,
+            to: referenceDate
+        ) ?? referenceDate
+        // non permettiamo di andare oltre il periodo corrente
+        referenceDate = range.start(from: candidate, calendar: calendar) <= range.start(from: Date(), calendar: calendar)
+            ? candidate
+            : Date()
+        rebuild()
+    }
+
+    // MARK: - Data Loading
+
     /// Ricalcola le statistiche dai dati locali già caricati dallo store.
     func load(habits: [Habit], entries: [HabitEntry]) {
         loadedHabits = habits
@@ -114,25 +209,33 @@ final class AnalyticsViewModel: ObservableObject {
         rebuild()
     }
 
-    /// Ricostruisce le statistiche dai dati caricati, per la finestra corrente.
+    /// Ricostruisce le statistiche dai dati caricati, per la finestra e il periodo correnti.
     private func rebuild() {
-        let end = Date()
+        let ref = referenceDate
         stats = loadedHabits.map { habit in
-            computeStats(for: habit, entries: loadedEntries.filter { $0.habitId == habit.id }, end: end)
+            computeStats(
+                for: habit,
+                entries: loadedEntries.filter { $0.habitId == habit.id },
+                reference: ref
+            )
         }
     }
 
-    private func computeStats(for habit: Habit, entries: [HabitEntry], end: Date) -> HabitStats {
+    private func computeStats(for habit: Habit, entries: [HabitEntry], reference: Date) -> HabitStats {
         let component = range.cellComponent
-        let windowStart = range.start(from: end, calendar: calendar)
+        let windowStart = range.start(from: reference, calendar: calendar)
+        // Per periodi già conclusi, end = fine del periodo; per il periodo corrente, end = ora.
+        let periodEnd = range.end(from: reference, calendar: calendar)
+        let windowEnd = min(periodEnd, Date())
         let cellTarget = self.cellTarget(for: habit, component: component)
+        let today = calendar.startOfDay(for: Date())
 
         // Giorni marcati come riposo (inizio giornata), per scontare le aspettative.
         let restDays = Set(entries.filter(\.skipped).map { calendar.startOfDay(for: $0.entryDate) })
 
         var cells: [HeatCell] = []
         for offset in 0..<500 {
-            guard let ref = calendar.date(byAdding: component, value: -offset, to: end) else { break }
+            guard let ref = calendar.date(byAdding: component, value: -offset, to: windowEnd) else { break }
             let interval = calendar.dateInterval(of: component, for: ref)
                 ?? DateInterval(start: calendar.startOfDay(for: ref), duration: 86_400)
             // Manteniamo sempre la cella corrente (offset 0); fermiamo quando la cella
@@ -150,9 +253,12 @@ final class AnalyticsViewModel: ObservableObject {
             // Quanti giorni di questa cella sono di riposo: scontano l'obiettivo atteso.
             let totalDays = max(1, Int((interval.duration / 86_400).rounded()))
             let restInCell = restDays.filter(inCell).count
-            let isRest = restInCell >= totalDays   // intera cella a riposo
+            let isRest = restInCell >= totalDays
             let activeFactor = Double(totalDays - restInCell) / Double(totalDays)
             let effectiveTarget = isRest ? 0 : max(1, Int((Double(cellTarget) * activeFactor).rounded()))
+
+            // True se la cella include il giorno corrente.
+            let isToday = today >= interval.start && today < interval.end
 
             cells.append(HeatCell(
                 date: interval.start,
@@ -160,18 +266,45 @@ final class AnalyticsViewModel: ObservableObject {
                 count: count,
                 fraction: effectiveTarget > 0 ? Double(count) / Double(effectiveTarget) : 0,
                 isComplete: !isRest && count >= effectiveTarget,
-                isRest: isRest
+                isRest: isRest,
+                isToday: isToday
             ))
         }
         cells.reverse() // dal più vecchio al più recente
 
-        // Streak corrente: dalle celle più recenti all'indietro. Il riposo è trasparente.
+        // ── Current streak: all-time, non limitata alla finestra ──────────────
+        // Itera a ritroso da oggi, cella per cella, contando quelle complete.
+        // Il riposo è trasparente (non incrementa né interrompe).
+        // La cella corrente (oggi) non interrompe la streak se ancora incompleta
+        // perché l'utente ha ancora tempo per completarla.
         var currentStreak = 0
-        for cell in cells.reversed() {
-            if cell.isRest { continue }
-            if cell.isComplete { currentStreak += 1 } else { break }
+        var cursor = calendar.startOfDay(for: Date())
+        let todayCellStart = calendar.dateInterval(of: component, for: Date())?.start
+        for _ in 0..<5000 {
+            guard let cellInterval = calendar.dateInterval(of: component, for: cursor) else { break }
+            let restInCell = restDays.filter { $0 >= cellInterval.start && $0 < cellInterval.end }.count
+            let totalInCell = max(1, Int((cellInterval.duration / 86_400).rounded()))
+            if restInCell < totalInCell {
+                // Cella non interamente a riposo: valutiamo il completamento.
+                let cellCount = entries
+                    .filter { $0.entryDate >= cellInterval.start && $0.entryDate < cellInterval.end }
+                    .reduce(0) { $0 + $1.count }
+                let activeFac = Double(totalInCell - restInCell) / Double(totalInCell)
+                let effTarget = max(1, Int((Double(cellTarget) * activeFac).rounded()))
+                if cellCount >= effTarget {
+                    currentStreak += 1
+                } else if cellInterval.start != todayCellStart {
+                    // Cella passata incompleta → streak interrotta.
+                    break
+                }
+                // Cella corrente ancora in corso → non incrementiamo, ma non interrompiamo.
+            }
+            // Cella a riposo → trasparente: avanziamo senza modificare la streak.
+            guard let prev = calendar.date(byAdding: component, value: -1, to: cellInterval.start) else { break }
+            cursor = prev
         }
-        // Streak migliore: il riposo non rompe né incrementa.
+
+        // ── Best streak: massima nella finestra ───────────────────────────────
         var bestStreak = 0, running = 0
         for cell in cells {
             if cell.isRest { continue }
@@ -207,8 +340,21 @@ final class AnalyticsViewModel: ObservableObject {
             header: header,
             showCellLabels: range == .week || range == .year,
             hasRest: cells.contains(where: \.isRest),
-            subtitle: range.subtitle
+            subtitle: subtitleForCell(component: component)
         )
+    }
+
+    // MARK: - Helpers
+
+    private func subtitleForCell(component: Calendar.Component) -> String {
+        let granularity: String
+        switch component {
+        case .day:        granularity = "per giorno"
+        case .weekOfYear: granularity = "per settimana"
+        case .month:      granularity = "per mese"
+        default:          granularity = ""
+        }
+        return "\(periodLabel) · \(granularity)"
     }
 
     /// Obiettivo atteso in una singola cella, scalando il target dell'abitudine
@@ -246,6 +392,31 @@ final class AnalyticsViewModel: ObservableObject {
         }
     }
 
+    private func formatWeekRange(from start: Date, to end: Date) -> String {
+        let startMonth = calendar.component(.month, from: start)
+        let endMonth = calendar.component(.month, from: end)
+        let startYear = calendar.component(.year, from: start)
+        let endYear = calendar.component(.year, from: end)
+
+        let startDay = calendar.component(.day, from: start)
+        let endDay = calendar.component(.day, from: end)
+
+        if startYear != endYear {
+            // Es. "30 dic 2025 – 5 gen 2026"
+            return "\(startDay) \(shortMonth(start)) \(startYear) – \(endDay) \(shortMonth(end)) \(endYear)"
+        } else if startMonth != endMonth {
+            // Es. "30 mag – 5 giu 2026"
+            return "\(startDay) \(shortMonth(start)) – \(endDay) \(shortMonth(end)) \(endYear)"
+        } else {
+            // Es. "9 – 15 giu 2026"
+            return "\(startDay) – \(endDay) \(shortMonth(end)) \(endYear)"
+        }
+    }
+
+    private func shortMonth(_ date: Date) -> String {
+        Self.shortMonthFormatter.string(from: date)
+    }
+
     private static let weekdayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "it_IT")
@@ -257,6 +428,27 @@ final class AnalyticsViewModel: ObservableObject {
         let f = DateFormatter()
         f.locale = Locale(identifier: "it_IT")
         f.dateFormat = "MMMMM"
+        return f
+    }()
+
+    private static let monthYearFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "it_IT")
+        f.dateFormat = "MMMM yyyy"
+        return f
+    }()
+
+    private static let yearFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "it_IT")
+        f.dateFormat = "yyyy"
+        return f
+    }()
+
+    private static let shortMonthFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "it_IT")
+        f.dateFormat = "MMM"
         return f
     }()
 }
