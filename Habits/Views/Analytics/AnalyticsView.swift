@@ -111,8 +111,8 @@ private struct HabitStatsCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 16) {
-                Label("serie \(stat.currentStreak)", systemImage: "flame.fill")
-                Label("record \(stat.bestStreak)", systemImage: "trophy.fill")
+                Label("serie \(stat.currentStreak) \(stat.streakUnit)", systemImage: "flame.fill")
+                Label("record \(stat.bestStreak) \(stat.streakUnit)", systemImage: "trophy.fill")
                 if stat.hasRest {
                     Spacer()
                     Label("riposo", systemImage: "moon.fill")

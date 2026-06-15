@@ -102,10 +102,12 @@ struct HeatCell: Identifiable {
 struct HabitStats: Identifiable {
     let id: UUID
     let habit: Habit
-    /// Serie consecutiva all-time (non limitata alla finestra).
+    /// Serie consecutiva all-time, contata nel periodo dell'abitudine (es. settimane per weekly).
     let currentStreak: Int
-    /// Streak massima nella finestra.
+    /// Miglior serie consecutiva all-time.
     let bestStreak: Int
+    /// Etichetta dell'unità della streak (es. "sett.", "mesi").
+    let streakUnit: String
     /// Completamento medio della finestra [0, 1].
     let completion: Double
     /// Celle della heatmap, dalla più vecchia alla più recente.
@@ -276,65 +278,56 @@ final class AnalyticsViewModel: ObservableObject {
         }
         cells.reverse() // dal più vecchio al più recente
 
-        // ── Current streak: all-time, non limitata alla finestra ──────────────
-        // Itera a ritroso da oggi, cella per cella, contando quelle complete.
-        // Il riposo è trasparente (non incrementa né interrompe).
-        // La cella corrente (oggi) non interrompe la streak se ancora incompleta
-        // perché l'utente ha ancora tempo per completarla.
+        // ── Streak basata sul periodo dell'abitudine (non sulla vista analytics) ──
+        // Es: abitudine settimanale → streak conta settimane con obiettivo raggiunto.
+        let sComp = calendarComponent(for: habit.period)
+        let sTarget = habit.targetCount
+        let currentPeriodStart = calendar.dateInterval(of: sComp, for: Date())?.start
+
+        // Current streak: all-time, a ritroso da oggi.
         var currentStreak = 0
         var cursor = calendar.startOfDay(for: Date())
-        let todayCellStart = calendar.dateInterval(of: component, for: Date())?.start
         for _ in 0..<5000 {
-            guard let cellInterval = calendar.dateInterval(of: component, for: cursor) else { break }
-            let restInCell = restDays.filter { $0 >= cellInterval.start && $0 < cellInterval.end }.count
-            let totalInCell = max(1, Int((cellInterval.duration / 86_400).rounded()))
-            if restInCell < totalInCell {
-                // Cella non interamente a riposo: valutiamo il completamento.
-                let cellCount = entries
-                    .filter { $0.entryDate >= cellInterval.start && $0.entryDate < cellInterval.end }
-                    .reduce(0) { $0 + $1.count }
-                let activeFac = Double(totalInCell - restInCell) / Double(totalInCell)
-                let effTarget = max(1, Int((Double(cellTarget) * activeFac).rounded()))
-                if cellCount >= effTarget {
+            guard let si = calendar.dateInterval(of: sComp, for: cursor) else { break }
+            let restInS = restDays.filter { $0 >= si.start && $0 < si.end }.count
+            let totalInS = max(1, Int((si.duration / 86_400).rounded()))
+            if restInS < totalInS {
+                let cnt = entries.filter { $0.entryDate >= si.start && $0.entryDate < si.end }.reduce(0) { $0 + $1.count }
+                let effT = max(1, Int((Double(sTarget) * Double(totalInS - restInS) / Double(totalInS)).rounded()))
+                if cnt >= effT {
                     currentStreak += 1
-                } else if cellInterval.start != todayCellStart {
-                    // Cella passata incompleta → streak interrotta.
+                } else if si.start != currentPeriodStart {
                     break
                 }
-                // Cella corrente ancora in corso → non incrementiamo, ma non interrompiamo.
             }
-            // Cella a riposo → trasparente: avanziamo senza modificare la streak.
-            guard let prev = calendar.date(byAdding: component, value: -1, to: cellInterval.start) else { break }
+            guard let prev = calendar.date(byAdding: sComp, value: -1, to: si.start) else { break }
             cursor = prev
         }
 
-        // ── Best streak: massima all-time ─────────────────────────────────────
-        // Stessa logica della current streak ma in avanti: itera da prima entry a oggi.
+        // Best streak: massima all-time, in avanti dalla prima entry.
         var bestStreak = 0
         if let firstDate = entries.min(by: { $0.entryDate < $1.entryDate })?.entryDate {
-            var bCursor = calendar.dateInterval(of: component, for: firstDate)?.start ?? firstDate
-            let bEnd = calendar.dateInterval(of: component, for: Date())?.start ?? Date()
+            var bCursor = calendar.dateInterval(of: sComp, for: firstDate)?.start ?? firstDate
+            let bEnd = currentPeriodStart ?? Date()
             var bRunning = 0
             while bCursor <= bEnd {
-                guard let cellInterval = calendar.dateInterval(of: component, for: bCursor) else { break }
-                let restInCell = restDays.filter { $0 >= cellInterval.start && $0 < cellInterval.end }.count
-                let totalInCell = max(1, Int((cellInterval.duration / 86_400).rounded()))
-                if restInCell < totalInCell {
-                    let cellCount = entries
-                        .filter { $0.entryDate >= cellInterval.start && $0.entryDate < cellInterval.end }
-                        .reduce(0) { $0 + $1.count }
-                    let activeFac = Double(totalInCell - restInCell) / Double(totalInCell)
-                    let effTarget = max(1, Int((Double(cellTarget) * activeFac).rounded()))
-                    if cellCount >= effTarget {
+                guard let si = calendar.dateInterval(of: sComp, for: bCursor) else { break }
+                let restInS = restDays.filter { $0 >= si.start && $0 < si.end }.count
+                let totalInS = max(1, Int((si.duration / 86_400).rounded()))
+                if restInS < totalInS {
+                    let cnt = entries.filter { $0.entryDate >= si.start && $0.entryDate < si.end }.reduce(0) { $0 + $1.count }
+                    let effT = max(1, Int((Double(sTarget) * Double(totalInS - restInS) / Double(totalInS)).rounded()))
+                    if cnt >= effT {
                         bRunning += 1
                         bestStreak = max(bestStreak, bRunning)
-                    } else if cellInterval.start != todayCellStart {
+                    } else if si.start != currentPeriodStart {
                         bRunning = 0
                     }
                 }
-                guard let next = calendar.date(byAdding: component, value: 1, to: cellInterval.start) else { break }
+                guard let next = calendar.date(byAdding: sComp, value: 1, to: si.start) else { break }
                 bCursor = next
             }
+            bestStreak = max(bestStreak, currentStreak)
         }
 
         // Completamento medio della finestra = media di quanto sono piene le celle,
@@ -358,6 +351,7 @@ final class AnalyticsViewModel: ObservableObject {
             habit: habit,
             currentStreak: currentStreak,
             bestStreak: bestStreak,
+            streakUnit: streakUnit(for: habit.period),
             completion: completion,
             cells: cells,
             columns: max(1, columns),
@@ -389,6 +383,24 @@ final class AnalyticsViewModel: ObservableObject {
         let cellDays = days(forComponent: component)
         let scaled = Double(habit.targetCount) * cellDays / periodDays
         return max(1, Int(scaled.rounded()))
+    }
+
+    private func streakUnit(for period: HabitPeriod) -> String {
+        switch period {
+        case .daily:   return "gg"
+        case .weekly:  return "sett."
+        case .monthly: return "mesi"
+        case .yearly:  return "anni"
+        }
+    }
+
+    private func calendarComponent(for period: HabitPeriod) -> Calendar.Component {
+        switch period {
+        case .daily:   return .day
+        case .weekly:  return .weekOfYear
+        case .monthly: return .month
+        case .yearly:  return .year
+        }
     }
 
     private func days(forPeriod period: HabitPeriod) -> Double {
