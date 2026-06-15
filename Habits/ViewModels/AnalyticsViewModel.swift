@@ -308,12 +308,33 @@ final class AnalyticsViewModel: ObservableObject {
             cursor = prev
         }
 
-        // ── Best streak: massima nella finestra ───────────────────────────────
-        var bestStreak = 0, running = 0
-        for cell in cells {
-            if cell.isRest { continue }
-            if cell.isComplete { running += 1; bestStreak = max(bestStreak, running) }
-            else { running = 0 }
+        // ── Best streak: massima all-time ─────────────────────────────────────
+        // Stessa logica della current streak ma in avanti: itera da prima entry a oggi.
+        var bestStreak = 0
+        if let firstDate = entries.min(by: { $0.entryDate < $1.entryDate })?.entryDate {
+            var bCursor = calendar.dateInterval(of: component, for: firstDate)?.start ?? firstDate
+            let bEnd = calendar.dateInterval(of: component, for: Date())?.start ?? Date()
+            var bRunning = 0
+            while bCursor <= bEnd {
+                guard let cellInterval = calendar.dateInterval(of: component, for: bCursor) else { break }
+                let restInCell = restDays.filter { $0 >= cellInterval.start && $0 < cellInterval.end }.count
+                let totalInCell = max(1, Int((cellInterval.duration / 86_400).rounded()))
+                if restInCell < totalInCell {
+                    let cellCount = entries
+                        .filter { $0.entryDate >= cellInterval.start && $0.entryDate < cellInterval.end }
+                        .reduce(0) { $0 + $1.count }
+                    let activeFac = Double(totalInCell - restInCell) / Double(totalInCell)
+                    let effTarget = max(1, Int((Double(cellTarget) * activeFac).rounded()))
+                    if cellCount >= effTarget {
+                        bRunning += 1
+                        bestStreak = max(bestStreak, bRunning)
+                    } else if cellInterval.start != todayCellStart {
+                        bRunning = 0
+                    }
+                }
+                guard let next = calendar.date(byAdding: component, value: 1, to: cellInterval.start) else { break }
+                bCursor = next
+            }
         }
 
         // Completamento medio della finestra = media di quanto sono piene le celle,
