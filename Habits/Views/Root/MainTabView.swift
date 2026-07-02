@@ -15,10 +15,18 @@ struct MainTabView: View {
 
             AnalyticsView()
                 .tabItem { Label("Analytics", systemImage: "chart.bar.fill") }
+
+            SettingsView()
+                .tabItem { Label("Impostazioni", systemImage: "gearshape.fill") }
         }
         .tint(.accentColor)
         .environmentObject(habitsVM)
-        .task { habitsVM.reload() }
+        .task {
+            habitsVM.reload()
+            // Riallinea il reminder pianificato allo stato salvato, anche se
+            // l'utente non apre la tab Impostazioni in questa sessione.
+            ReminderManager.shared.syncOnLaunch()
+        }
         .onChange(of: scenePhase) { _, phase in
             // Al ritorno in foreground rilegge lo store: riflette anche i log
             // fatti dal widget mentre l'app era in background.
