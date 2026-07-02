@@ -8,6 +8,7 @@ vivono sul dispositivo con **SwiftData** e si sincronizzano in automatico sul tu
 - **Abitudini** — crea/modifica abitudini con frequenza target (N volte per giorno / settimana / mese / anno), icona e colore.
 - **Analytics** — trend, streak corrente, record e tasso di completamento per ogni abitudine.
 - **Widget** — griglia "Dots" configurabile sulla Home: spunti le abitudini con un tap (App Intents interattivi, iOS 17+).
+- **Impostazioni** — reminder giornaliero (notifica locale) a un orario a scelta, per non dimenticare di inserire le abitudini del giorno.
 
 ## Stack
 
@@ -31,7 +32,8 @@ HabitsKit/                  # framework condiviso (Habit, HabitEntry, HabitPerio
 Habits/                     # app
 ├─ HabitsApp.swift          #   entry point + ModelContainer (CloudKit)
 ├─ ViewModels/              #   Habits, Analytics
-├─ Views/                   #   Root, Today, Habits, Analytics, Components
+├─ Views/                   #   Root, Today, Habits, Analytics, Settings, Components
+├─ Notifications/           #   ReminderManager (notifica locale giornaliera)
 └─ Resources/               #   Info.plist, Assets.xcassets
 HabitsWidget/               # estensione: widget "Dots" + App Intents (log/config)
 project.yml                 # definizione progetto (XcodeGen)
@@ -91,5 +93,4 @@ all'utente proprietario dell'iCloud.
 
 ## Roadmap (post-MVP)
 
-- Notifiche/reminder locali
 - Reorder drag&drop e archiviazione abitudini
